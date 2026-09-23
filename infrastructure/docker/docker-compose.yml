@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: copinex-postgres
+    environment:
+      POSTGRES_USER: copinex
+      POSTGRES_PASSWORD: copinex_dev_password
+      POSTGRES_DB: copinex
+    ports:
+      - "5432:5432"
+    volumes:
+      - copinex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copinex -d copinex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: copinex-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - copinex_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  copinex_pgdata:
+  copinex_redisdata:

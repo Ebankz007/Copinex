@@ -1,0 +1,20 @@
+{
+  "name": "@copinex/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Copinex PostgreSQL schema (Drizzle) + migrations",
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.36.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.0",
+    "typescript": "^5.6.0"
+  }
+}
