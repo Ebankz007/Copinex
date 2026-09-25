@@ -42,16 +42,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: |
-          pnpm --filter @copinex/engine lint
-          pnpm --filter @copinex/api lint
-
+      # Lint runs tsc --noEmit, which resolves @copinex/database and
+      # @copinex/engine from their built dist/*.d.ts — build before lint.
       - name: Build (database, engine, api)
         run: |
           pnpm --filter @copinex/database build
           pnpm --filter @copinex/engine build
           pnpm --filter @copinex/api build
+
+      - name: Lint
+        run: |
+          pnpm --filter @copinex/engine lint
+          pnpm --filter @copinex/api lint
 
       - name: Test engine
         run: pnpm --filter @copinex/engine test
