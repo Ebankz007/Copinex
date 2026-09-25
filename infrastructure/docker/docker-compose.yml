@@ -7,9 +7,12 @@ services:
       POSTGRES_PASSWORD: copinex_dev_password
       POSTGRES_DB: copinex
     ports:
-      - "5432:5432"
+      # Matches the documented local setup (native service on this machine uses 5433).
+      - "5433:5432"
     volumes:
       - copinex_pgdata:/var/lib/postgresql/data
+      # Provisions copinex_test so a compose-based environment can run the API suite.
+      - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U copinex -d copinex"]
       interval: 5s

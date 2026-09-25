@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Lint · Build · Test (engine + api)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: copinex
+          POSTGRES_PASSWORD: copinex_dev_password
+          POSTGRES_DB: copinex
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U copinex -d copinex"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The service container only creates `copinex`; the vitest global-setup
+      # creates `copinex_test` on first connect (see vitest.global-setup.ts).
+      TEST_DATABASE_URL: postgresql://copinex:copinex_dev_password@127.0.0.1:5432/copinex_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: |
+          pnpm --filter @copinex/engine lint
+          pnpm --filter @copinex/api lint
+
+      - name: Build (database, engine, api)
+        run: |
+          pnpm --filter @copinex/database build
+          pnpm --filter @copinex/engine build
+          pnpm --filter @copinex/api build
+
+      - name: Test engine
+        run: pnpm --filter @copinex/engine test
+
+      - name: Test API (integration against Postgres service)
+        run: pnpm --filter @copinex/api test
+
+  build-web:
+    name: Build web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # web imports @copinex/engine — build engine first (topo order matters).
+      - name: Build (engine + web)
+        run: |
+          pnpm --filter @copinex/engine build
+          pnpm --filter @copinex/web build
