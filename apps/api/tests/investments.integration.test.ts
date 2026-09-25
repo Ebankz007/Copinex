@@ -32,7 +32,7 @@ async function resetDb() {
     TRUNCATE TABLE investment_commissions, investment_earnings, investments,
     investment_packages, ledger_entries, wallets, users, registrations, fee_allocations,
     bonus_payouts, rank_milestones, leadership_rewards, team_volume, trading_settlements,
-    config CASCADE
+    withdrawal_requests, config CASCADE
   `);
   await seedPackagesAndConfig();
 }

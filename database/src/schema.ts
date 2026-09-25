@@ -42,9 +42,15 @@ export const bonusTypeEnum = pgEnum('bonus_type', [
   'INVESTMENT_DAILY_PROFIT',
   'INVESTMENT_MONTHLY_PROFIT',
   'UPLINE_INVESTMENT_COMMISSION',
+  // Money rails (Phase 1): deposits, withdrawal holds, withdrawal refunds
+  'DEPOSIT',
+  'WITHDRAWAL',
+  'WITHDRAWAL_REFUND',
 ]);
 
 export const payoutStatusEnum = pgEnum('payout_status', ['PAID', 'FLAGGED', 'REVIEW', 'VOID']);
+
+export const withdrawalStatusEnum = pgEnum('withdrawal_status', ['PENDING', 'PAID', 'REJECTED']);
 
 export const settlementStatusEnum = pgEnum('settlement_status', ['PENDING', 'PROCESSED', 'FAILED']);
 
@@ -345,6 +351,33 @@ export const investmentEarnings = pgTable(
     uniqueIndex('investment_earnings_period_idx').on(t.investmentId, t.period),
     index('investment_earnings_user_idx').on(t.userId),
     index('investment_earnings_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * Member-initiated withdrawal requests. Funds are held immediately (debited
+ * from the wallet) on request; admin approves (PAID — money leaves the
+ * platform) or rejects (REJECTED — refunded to the wallet).
+ */
+export const withdrawalRequests = pgTable(
+  'withdrawal_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    walletType: walletTypeEnum('wallet_type').notNull().default('WITHDRAWAL'),
+    amountCents: integer('amount_cents').notNull(),
+    status: withdrawalStatusEnum('status').notNull().default('PENDING'),
+    /** Admin who approved/rejected. null while PENDING. */
+    adminId: uuid('admin_id').references((): any => users.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('withdrawal_user_idx').on(t.userId),
+    index('withdrawal_status_idx').on(t.status),
   ],
 );
 

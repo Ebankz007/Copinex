@@ -15,7 +15,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default('redis://localhost:6379'),
-  JWT_SECRET: z.string().min(32).default('dev-only-secret-change-me-32chars-min'),
+  // No default: a missing secret must fail fast, never silently fall back to
+  // a forgeable value. Generate with `openssl rand -base64 48`.
+  JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
   LOG_LEVEL: z.string().default('info'),
 });

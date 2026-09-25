@@ -51,13 +51,73 @@ export interface WalletSummary {
   totalCents: number;
 }
 
+export interface UserDto {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: "MEMBER" | "ADMIN";
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+  sponsorId: string | null;
+  createdAt: string;
+}
+
+const TOKEN_KEY = "copinex_token";
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem("copinex_token");
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  window.localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  window.localStorage.removeItem(TOKEN_KEY);
 }
 
 export function isDemoMode(): boolean {
   return getToken() === null;
+}
+
+/** The logged-in user, or null in demo mode. */
+export async function fetchMe(): Promise<UserDto | null> {
+  if (isDemoMode()) return null;
+  try {
+    const data = await request<{ user: UserDto }>("/auth/me");
+    return data.user;
+  } catch {
+    // Expired/invalid token — treat as demo rather than crash the page.
+    clearToken();
+    return null;
+  }
+}
+
+export async function login(email: string, password: string): Promise<{ token: string; user: UserDto }> {
+  const data = await request<{ token: string; user: UserDto }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  setToken(data.token);
+  return data;
+}
+
+export async function register(input: {
+  email: string;
+  password: string;
+  fullName?: string;
+  sponsorId?: string;
+}): Promise<{ token: string; user: UserDto }> {
+  const data = await request<{ token: string; user: UserDto }>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  setToken(data.token);
+  return data;
+}
+
+export function logout(): void {
+  clearToken();
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -119,7 +119,11 @@ export function InvestmentCenter() {
       {demo && (
         <p className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-xs text-amber-300">
           Demo mode — no account session. Projections are computed with the same engine the
-          backend uses. Sign in to invest with real funds.
+          backend uses.{" "}
+          <Link href="/login" className="font-bold text-amber-200 underline underline-offset-2">
+            Sign in
+          </Link>{" "}
+          to invest with real funds.
         </p>
       )}
 

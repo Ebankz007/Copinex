@@ -10,6 +10,12 @@ import {
   listPackages,
   updatePackage,
 } from '../services/investment-service.js';
+import {
+  adminDeposit,
+  approveWithdrawal,
+  listWithdrawals,
+  rejectWithdrawal,
+} from '../services/withdrawals.js';
 
 export const adminRouter = Router();
 
@@ -78,6 +84,56 @@ adminRouter.post('/investments/:id/close', async (req, res, next) => {
   try {
     const investment = await closeInvestment(req.params.id);
     res.json({ investment });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Money rails (Phase 1) ──────────────────────────────
+
+const depositSchema = z.object({
+  userId: z.string().uuid(),
+  amountCents: z.number().int().positive(),
+  note: z.string().max(200).optional(),
+});
+
+/** Interim deposit rail (no payment provider yet): admin credits a member's COPINEX wallet. */
+adminRouter.post('/wallets/deposit', async (req, res, next) => {
+  try {
+    const body = depositSchema.parse(req.body);
+    const deposit = await adminDeposit(body.userId, body.amountCents, req.user!.id, body.note);
+    res.status(201).json({ deposit });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** All withdrawal requests, optionally filtered by status. */
+adminRouter.get('/wallets/withdrawals', async (req, res, next) => {
+  try {
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const withdrawals = await listWithdrawals(status);
+    res.json({ withdrawals });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Approve a PENDING withdrawal — the manual payout trigger. */
+adminRouter.post('/wallets/withdrawals/:id/approve', async (req, res, next) => {
+  try {
+    const request = await approveWithdrawal(req.params.id, req.user!.id);
+    res.json({ request });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Reject a PENDING withdrawal — held funds are refunded to the wallet. */
+adminRouter.post('/wallets/withdrawals/:id/reject', async (req, res, next) => {
+  try {
+    const request = await rejectWithdrawal(req.params.id, req.user!.id);
+    res.json({ request });
   } catch (e) {
     next(e);
   }
