@@ -89,3 +89,41 @@ export const TRADING_PROFIT_SPLIT = {
 
 /** Compression window — how far up the upline to search for a qualified (Active) member. §9.2 */
 export const COMPRESSION_STOP_AT_GEN = 6;
+
+// ── 90-Day Investment Packages ────────────────────────
+// Source: Investment Package spec (Henry, 2026-09-25).
+// Monthly rate is the source of truth (bps). Daily rate = round(monthly/30),
+// which reproduces the spec's stated daily rates exactly: 33/37/40/45/50 bps.
+
+/** Days of daily profit accrual at the start of an investment. */
+export const DAILY_ACCRUAL_DAYS = 90;
+
+/** Lock on the first 90 days of profit — withdrawable only after day 99. */
+export const AVAILABLE_AFTER_DAYS = 99;
+
+/** The five investment tiers. maxAmountCents = null means no upper bound. */
+export const INVESTMENT_PACKAGES = [
+  { tier: 1, name: '10% Monthly', minAmountCents: 50_00, maxAmountCents: 499_99, monthlyRateBps: 1000, dailyRateBps: 33 },
+  { tier: 2, name: '11% Monthly', minAmountCents: 500_00, maxAmountCents: 999_99, monthlyRateBps: 1100, dailyRateBps: 37 },
+  { tier: 3, name: '12% Monthly', minAmountCents: 1_000_00, maxAmountCents: 1_999_99, monthlyRateBps: 1200, dailyRateBps: 40 },
+  { tier: 4, name: '13.5% Monthly', minAmountCents: 2_000_00, maxAmountCents: 4_999_99, monthlyRateBps: 1350, dailyRateBps: 45 },
+  { tier: 5, name: '15% Monthly', minAmountCents: 5_000_00, maxAmountCents: null, monthlyRateBps: 1500, dailyRateBps: 50 },
+] as const;
+
+/** Upline commission: an ADDITIONAL 20% of each account's monthly profit, paid to its upline. */
+export const UPLINE_COMMISSION_RATE_BPS = 2000; // 20%
+
+/**
+ * Split of the 20% commission pool across the upline chain.
+ * Direct sponsor 50%, then Gen 2–6 in the existing generation-rate proportions
+ * (4:2:1.5:1.5:1 scaled to the remaining 50% → 20/10/7.5/7.5/5).
+ * Sums to exactly 10000 bps. Config-driven in production (config table).
+ */
+export const UPLINE_COMMISSION_SPLIT = {
+  directSponsor: 5000,
+  gen2: 2000,
+  gen3: 1000,
+  gen4: 750,
+  gen5: 750,
+  gen6: 500,
+} as const;

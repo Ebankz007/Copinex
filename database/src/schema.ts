@@ -1,6 +1,11 @@
 /**
  * Copinex PostgreSQL schema — preliminary, per analysis §6.
  * Money columns are integer cents (integer/bigint). Never floats.
+ *
+ * Extended for the 90-Day Investment Package feature:
+ *  - wallet_type (COPINEX / WITHDRAWAL) — the spec names a Withdrawal Wallet
+ *  - user role (MEMBER / ADMIN) — admin package management
+ *  - investment_packages / investments / investment_earnings / investment_commissions
  */
 import {
   bigint,
@@ -20,6 +25,8 @@ import {
 
 export const userStatusEnum = pgEnum('user_status', ['ACTIVE', 'INACTIVE', 'SUSPENDED']);
 
+export const userRoleEnum = pgEnum('user_role', ['MEMBER', 'ADMIN']);
+
 export const bonusTypeEnum = pgEnum('bonus_type', [
   'DIRECT_REFERRAL_BONUS',
   'GENERATION_BONUS_GEN2',
@@ -31,11 +38,21 @@ export const bonusTypeEnum = pgEnum('bonus_type', [
   'SPONSOR_OVERRIDE',
   'TRADING_PROFIT_RETAINED',
   'TRADING_PERFORMANCE_SHARE',
+  'INVESTMENT_PRINCIPAL',
+  'INVESTMENT_DAILY_PROFIT',
+  'INVESTMENT_MONTHLY_PROFIT',
+  'UPLINE_INVESTMENT_COMMISSION',
 ]);
 
 export const payoutStatusEnum = pgEnum('payout_status', ['PAID', 'FLAGGED', 'REVIEW', 'VOID']);
 
 export const settlementStatusEnum = pgEnum('settlement_status', ['PENDING', 'PROCESSED', 'FAILED']);
+
+export const walletTypeEnum = pgEnum('wallet_type', ['COPINEX', 'WITHDRAWAL']);
+
+export const investmentStatusEnum = pgEnum('investment_status', ['ACTIVE', 'MATURED', 'CLOSED']);
+
+export const earningStatusEnum = pgEnum('earning_status', ['LOCKED', 'AVAILABLE']);
 
 // ── Tables ─────────────────────────────────────────────
 
@@ -49,6 +66,7 @@ export const users = pgTable(
     fullName: text('full_name'),
     sponsorId: uuid('sponsor_id').references((): any => users.id),
     placementParentId: uuid('placement_parent_id').references((): any => users.id),
+    role: userRoleEnum('role').notNull().default('MEMBER'),
     status: userStatusEnum('status').notNull().default('ACTIVE'),
     isActive: boolean('is_active').notNull().default(true),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
@@ -64,7 +82,11 @@ export const users = pgTable(
   ],
 );
 
-/** One wallet per member. balance_cents is integer cents. */
+/**
+ * Wallets. One row per (user, wallet_type):
+ *  - COPINEX   — main wallet (fees, bonuses, commissions)
+ *  - WITHDRAWAL — investment profit wallet (the spec's "Withdrawal Wallet")
+ */
 export const wallets = pgTable(
   'wallets',
   {
@@ -72,12 +94,13 @@ export const wallets = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id),
+    walletType: walletTypeEnum('wallet_type').notNull().default('COPINEX'),
     balanceCents: bigint('balance_cents', { mode: 'number' }).notNull().default(0),
     currency: text('currency').notNull().default('USD'),
     version: integer('version').notNull().default(0), // optimistic lock
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('wallets_user_idx').on(t.userId)],
+  (t) => [uniqueIndex('wallets_user_type_idx').on(t.userId, t.walletType)],
 );
 
 /** Append-only ledger. Every money movement, with balance_after for audit. */
@@ -88,10 +111,11 @@ export const ledgerEntries = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id),
+    walletType: walletTypeEnum('wallet_type').notNull().default('COPINEX'),
     type: bonusTypeEnum('type').notNull(),
     amountCents: bigint('amount_cents', { mode: 'number' }).notNull(), // signed: +credit / -debit
     balanceAfterCents: bigint('balance_after_cents', { mode: 'number' }).notNull(),
-    sourceType: text('source_type').notNull(), // 'registration' | 'settlement' | ...
+    sourceType: text('source_type').notNull(), // 'registration' | 'settlement' | 'investment' | ...
     sourceId: uuid('source_id').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -247,4 +271,109 @@ export const config = pgTable(
     description: text('description'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
+);
+
+// ── 90-Day Investment Packages ─────────────────────────
+
+/** The five investment tiers. Rates in bps; amounts in integer cents. */
+export const investmentPackages = pgTable(
+  'investment_packages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tier: integer('tier').notNull(),
+    name: text('name').notNull(),
+    minAmountCents: integer('min_amount_cents').notNull(),
+    /** null = no upper bound (tier 5: $5,000+). */
+    maxAmountCents: integer('max_amount_cents'),
+    monthlyRateBps: integer('monthly_rate_bps').notNull(),
+    dailyRateBps: integer('daily_rate_bps').notNull(),
+    status: text('status').notNull().default('ACTIVE'), // ACTIVE | INACTIVE
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('investment_packages_tier_idx').on(t.tier)],
+);
+
+/** A member's investment. Capital stays active after the 99-day window. */
+export const investments = pgTable(
+  'investments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    packageId: uuid('package_id')
+      .notNull()
+      .references(() => investmentPackages.id),
+    principalCents: integer('principal_cents').notNull(),
+    status: investmentStatusEnum('status').notNull().default('ACTIVE'),
+    startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+    accrualEndDate: timestamp('accrual_end_date', { withTimezone: true }).notNull(),
+    availableDate: timestamp('available_date', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('investments_user_idx').on(t.userId),
+    index('investments_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * Earning credits. period: 'D001'..'D090' (daily) or 'M2026-10' (monthly).
+ * UNIQUE(investment_id, period) makes the accrual job idempotent.
+ */
+export const investmentEarnings = pgTable(
+  'investment_earnings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    investmentId: uuid('investment_id')
+      .notNull()
+      .references(() => investments.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    period: text('period').notNull(),
+    kind: text('kind').notNull(), // 'DAILY' | 'MONTHLY'
+    amountCents: integer('amount_cents').notNull(),
+    status: earningStatusEnum('status').notNull().default('LOCKED'),
+    creditedAt: timestamp('credited_at', { withTimezone: true }).notNull(),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('investment_earnings_period_idx').on(t.investmentId, t.period),
+    index('investment_earnings_user_idx').on(t.userId),
+    index('investment_earnings_status_idx').on(t.status),
+  ],
+);
+
+/** The 20% upline commission payouts generated by monthly profit. */
+export const investmentCommissions = pgTable(
+  'investment_commissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    investmentId: uuid('investment_id')
+      .notNull()
+      .references(() => investments.id),
+    period: text('period').notNull(), // 'M2026-10'
+    payerUserId: uuid('payer_user_id')
+      .notNull()
+      .references(() => users.id),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id),
+    level: integer('level').notNull(), // 1 = direct sponsor
+    amountCents: integer('amount_cents').notNull(),
+    status: payoutStatusEnum('status').notNull().default('PAID'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('investment_commissions_period_recipient_idx').on(
+      t.investmentId,
+      t.period,
+      t.recipientId,
+    ),
+    index('investment_commissions_recipient_idx').on(t.recipientId),
+  ],
 );

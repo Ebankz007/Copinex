@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { logger } from '../config/logger.js';
+import { HttpError } from '../lib/http-error.js';
 
 /** Central error handler — the only place errors become HTTP responses. */
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
@@ -9,6 +10,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       error: 'VALIDATION_ERROR',
       details: err.flatten().fieldErrors,
     });
+    return;
+  }
+
+  if (err instanceof HttpError) {
+    res.status(err.status).json({ error: err.code, message: err.message });
     return;
   }
 

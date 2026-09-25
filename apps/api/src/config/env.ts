@@ -1,5 +1,13 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+
+// Load the workspace .env (platform/.env) regardless of CWD. Existing
+// process env vars win — dotenv never overrides them.
+dotenv.config({
+  path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../.env'),
+});
 
 /** Runtime-validated environment. Fails fast on missing required vars. */
 const envSchema = z.object({

@@ -13,9 +13,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@copinex/database": "workspace:*",
     "@copinex/engine": "workspace:*",
     "dotenv": "^16.4.0",
+    "drizzle-orm": "^0.36.4",
     "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.13.0",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
@@ -23,8 +26,11 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^3.0.0"
