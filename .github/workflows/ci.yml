@@ -44,10 +44,12 @@ jobs:
 
       # Lint runs tsc --noEmit, which resolves @copinex/database and
       # @copinex/engine from their built dist/*.d.ts — build before lint.
-      - name: Build (database, engine, api)
+      # Order matters: database/src/seed.ts imports @copinex/engine, so
+      # engine must build before database; api imports both.
+      - name: Build (engine, database, api)
         run: |
-          pnpm --filter @copinex/database build
           pnpm --filter @copinex/engine build
+          pnpm --filter @copinex/database build
           pnpm --filter @copinex/api build
 
       - name: Lint
