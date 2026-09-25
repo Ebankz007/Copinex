@@ -247,11 +247,13 @@ describe('accrual job', () => {
     expect(comm.rows[0]).toMatchObject({ level: 1, amount_cents: 143 });
     expect(comm.rows[1]).toMatchObject({ level: 2, amount_cents: 57 });
 
+    // bob's COPINEX wallet: $15 direct referral (carol's registration) + $1.43
+    // upline commission (carol's monthly profit).
     const bobWallet = await pool.query('SELECT balance_cents FROM wallets WHERE user_id = $1 AND wallet_type = $2', [
       bob.user.id,
       'COPINEX',
     ]);
-    expect(Number(bobWallet.rows[0].balance_cents)).toBe(143);
+    expect(Number(bobWallet.rows[0].balance_cents)).toBe(1500 + 143);
     expect(invId).toBeTruthy();
   });
 

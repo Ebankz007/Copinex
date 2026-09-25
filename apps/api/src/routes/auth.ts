@@ -7,7 +7,7 @@ import { HttpError } from '../lib/http-error.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signAuthToken } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/auth.js';
-import { ensureWallets } from '../services/wallets.js';
+import { registerMember } from '../services/registration-service.js';
 
 export const authRouter = Router();
 
@@ -35,44 +35,24 @@ function publicUser(u: typeof schema.users.$inferSelect) {
   };
 }
 
-/** Register a member. Creates both wallets (COPINEX + WITHDRAWAL). */
+/**
+ * Register a member. Runs the full compensation pipeline in one transaction:
+ * registration → §2 allocation → §10 pool accrual → §3/§4 bonuses → §8 matrix
+ * placement → team volume → §5 associate ranks (see registration-service).
+ */
 authRouter.post('/register', async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body);
-    const email = body.email.toLowerCase();
 
-    const existing = await db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.email, email))
-      .limit(1);
-    if (existing.length > 0) throw new HttpError(409, 'EMAIL_TAKEN', 'An account with this email already exists');
+    const result = await registerMember({
+      email: body.email,
+      passwordHash: hashPassword(body.password),
+      fullName: body.fullName ?? null,
+      sponsorId: body.sponsorId ?? null,
+    });
 
-    if (body.sponsorId) {
-      const sponsor = await db
-        .select({ id: schema.users.id })
-        .from(schema.users)
-        .where(eq(schema.users.id, body.sponsorId))
-        .limit(1);
-      if (sponsor.length === 0) throw new HttpError(400, 'INVALID_SPONSOR', 'Sponsor does not exist');
-    }
-
-    const [user] = await db
-      .insert(schema.users)
-      .values({
-        email,
-        passwordHash: hashPassword(body.password),
-        fullName: body.fullName ?? null,
-        sponsorId: body.sponsorId ?? null,
-        placementParentId: body.sponsorId ?? null,
-      })
-      .returning();
-    if (!user) throw new HttpError(500, 'INTERNAL_ERROR', 'Failed to create user');
-
-    await ensureWallets(db, user.id);
-
-    const token = signAuthToken({ sub: user.id, email: user.email, role: user.role });
-    res.status(201).json({ token, user: publicUser(user) });
+    const token = signAuthToken({ sub: result.user.id, email: result.user.email, role: result.user.role });
+    res.status(201).json({ token, user: publicUser(result.user) });
   } catch (e) {
     next(e);
   }

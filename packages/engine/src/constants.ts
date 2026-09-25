@@ -52,16 +52,16 @@ export const GENERATION_RATES: Readonly<Record<number, number>> = {
   6: 0.01, // $0.50
 } as const;
 
-/** Associate Rank milestones. §5. (rank_id, min_personal_referrals, min_team_volume, reward_cents) */
+/** Associate Rank milestones. §5. (rank_id, min_personal_referrals, min_team_volume_cents, reward_cents) */
 export const ASSOCIATE_RANKS = [
-  { rankId: 1, minPersonalReferrals: 3, minTeamVolume: 12, rewardCents: 35_00 },
-  { rankId: 2, minPersonalReferrals: 7, minTeamVolume: 40, rewardCents: 80_00 },
-  { rankId: 3, minPersonalReferrals: 15, minTeamVolume: 130, rewardCents: 250_00 },
-  { rankId: 4, minPersonalReferrals: 25, minTeamVolume: 700, rewardCents: 700_00 },
-  { rankId: 5, minPersonalReferrals: 35, minTeamVolume: 2_500, rewardCents: 2_000_00 },
-  { rankId: 6, minPersonalReferrals: 60, minTeamVolume: 6_000, rewardCents: 6_000_00 },
-  { rankId: 7, minPersonalReferrals: 100, minTeamVolume: 17_000, rewardCents: 25_000_00 },
-  { rankId: 8, minPersonalReferrals: 150, minTeamVolume: 60_000, rewardCents: 50_000_00 },
+  { rankId: 1, minPersonalReferrals: 3, minTeamVolumeCents: 12_00, rewardCents: 35_00 },
+  { rankId: 2, minPersonalReferrals: 7, minTeamVolumeCents: 40_00, rewardCents: 80_00 },
+  { rankId: 3, minPersonalReferrals: 15, minTeamVolumeCents: 130_00, rewardCents: 250_00 },
+  { rankId: 4, minPersonalReferrals: 25, minTeamVolumeCents: 700_00, rewardCents: 700_00 },
+  { rankId: 5, minPersonalReferrals: 35, minTeamVolumeCents: 2_500_00, rewardCents: 2_000_00 },
+  { rankId: 6, minPersonalReferrals: 60, minTeamVolumeCents: 6_000_00, rewardCents: 6_000_00 },
+  { rankId: 7, minPersonalReferrals: 100, minTeamVolumeCents: 17_000_00, rewardCents: 25_000_00 },
+  { rankId: 8, minPersonalReferrals: 150, minTeamVolumeCents: 60_000_00, rewardCents: 50_000_00 },
 ] as const;
 
 /**
@@ -85,6 +85,31 @@ export const TRADING_PROFIT_SPLIT = {
   sponsor: 0.1,
   /** Funds trade execution, AI infra, trader oversight, risk mgmt. */
   company: 0.3,
+} as const;
+
+// ── Integer basis points — the ONLY money math the engine uses ─────────────
+// Derived once from the spec floats above, so the readable spec mirror and the
+// exact integer arithmetic can never drift. Downstream money math is always
+// `amountCents × bps / 10000` — pure integer arithmetic, no floats, ever.
+
+const toBps = (fraction: number): number => Math.round(fraction * 10_000);
+
+export const FEE_SPLIT_BPS = {
+  companyReserve: toBps(FEE_SPLIT.companyReserve), // 4500
+  communityPool: toBps(FEE_SPLIT.communityPool), // 5500
+} as const;
+
+export const COMMUNITY_POOL_SPLIT_BPS = {
+  directReferral: toBps(COMMUNITY_POOL_SPLIT.directReferral), // 3000
+  generation: toBps(COMMUNITY_POOL_SPLIT.generation), // 1000
+  rank: toBps(COMMUNITY_POOL_SPLIT.rank), // 800
+  leadership: toBps(COMMUNITY_POOL_SPLIT.leadership), // 700
+} as const;
+
+export const TRADING_PROFIT_SPLIT_BPS = {
+  client: toBps(TRADING_PROFIT_SPLIT.client), // 6000
+  sponsor: toBps(TRADING_PROFIT_SPLIT.sponsor), // 1000
+  company: toBps(TRADING_PROFIT_SPLIT.company), // 3000
 } as const;
 
 /** Compression window — how far up the upline to search for a qualified (Active) member. §9.2 */

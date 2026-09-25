@@ -3,28 +3,60 @@
  *
  * These are the two fully-specified money functions in the spec, with
  * reconciliation invariants (§12) enforced in-code. All values are integer cents.
+ *
+ * Money math: integer basis points (constants.ts `*_BPS`) and largest-remainder
+ * rounding — each bucket gets floor(share), and the leftover cents go to the
+ * largest fractional shares. This guarantees the buckets ALWAYS sum to the
+ * source amount exactly, with no bucket more than 1 cent off its exact share,
+ * and never a fractional cent — for ANY input, not just round ones.
  */
 import {
-  COMMUNITY_POOL_SPLIT,
-  FEE_SPLIT,
+  COMMUNITY_POOL_SPLIT_BPS,
+  FEE_SPLIT_BPS,
   REGISTRATION_FEE_CENTS,
-  TRADING_PROFIT_SPLIT,
+  TRADING_PROFIT_SPLIT_BPS,
 } from './constants.js';
 import type { FeeAllocation, TradingProfitShares } from './types.js';
 
 /** §12 invariant: the five fee buckets must reconcile to exactly 100%. */
 export const FEE_SPLIT_TOTAL =
-  FEE_SPLIT.companyReserve +
-  COMMUNITY_POOL_SPLIT.directReferral +
-  COMMUNITY_POOL_SPLIT.generation +
-  COMMUNITY_POOL_SPLIT.rank +
-  COMMUNITY_POOL_SPLIT.leadership;
+  (FEE_SPLIT_BPS.companyReserve +
+    COMMUNITY_POOL_SPLIT_BPS.directReferral +
+    COMMUNITY_POOL_SPLIT_BPS.generation +
+    COMMUNITY_POOL_SPLIT_BPS.rank +
+    COMMUNITY_POOL_SPLIT_BPS.leadership) /
+  10_000;
 
 /** §12 invariant: the three profit buckets must reconcile to exactly 100%. */
 export const PROFIT_SPLIT_TOTAL =
-  TRADING_PROFIT_SPLIT.client +
-  TRADING_PROFIT_SPLIT.sponsor +
-  TRADING_PROFIT_SPLIT.company;
+  (TRADING_PROFIT_SPLIT_BPS.client +
+    TRADING_PROFIT_SPLIT_BPS.sponsor +
+    TRADING_PROFIT_SPLIT_BPS.company) /
+  10_000;
+
+/**
+ * Split `totalCents` across weighted buckets (weights in bps, summing to
+ * weightSum) using largest-remainder rounding. Returns integer cents summing
+ * EXACTLY to totalCents.
+ */
+function splitByBps(totalCents: number, weightsBps: readonly number[]): number[] {
+  const weightSum = weightsBps.reduce((sum, w) => sum + w, 0);
+  const exact = weightsBps.map((w) => (totalCents * w) / weightSum);
+  const base = exact.map(Math.floor);
+
+  let remainder = totalCents - base.reduce((sum, v) => sum + v, 0);
+  const order = exact
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (remainder <= 0) break;
+    // `i` is a valid index: `order` is derived from `exact`, which has the same
+    // length as `base`.
+    base[i] = base[i]! + 1;
+    remainder -= 1;
+  }
+  return base;
+}
 
 /**
  * §2 — Split a registration fee into its five buckets.
@@ -38,11 +70,14 @@ export function allocateRegistrationFee(feeCents: number = REGISTRATION_FEE_CENT
     throw new Error(`allocateRegistrationFee: feeCents must be a positive integer, got ${feeCents}`);
   }
 
-  const companyReserveCents = feeCents * FEE_SPLIT.companyReserve;
-  const directReferralPoolCents = feeCents * COMMUNITY_POOL_SPLIT.directReferral;
-  const generationPoolCents = feeCents * COMMUNITY_POOL_SPLIT.generation;
-  const rankPoolContributionCents = feeCents * COMMUNITY_POOL_SPLIT.rank;
-  const leadershipPoolContributionCents = feeCents * COMMUNITY_POOL_SPLIT.leadership;
+  const [companyReserveCents, directReferralPoolCents, generationPoolCents, rankPoolContributionCents, leadershipPoolContributionCents] =
+    splitByBps(feeCents, [
+      FEE_SPLIT_BPS.companyReserve,
+      COMMUNITY_POOL_SPLIT_BPS.directReferral,
+      COMMUNITY_POOL_SPLIT_BPS.generation,
+      COMMUNITY_POOL_SPLIT_BPS.rank,
+      COMMUNITY_POOL_SPLIT_BPS.leadership,
+    ]) as [number, number, number, number, number];
 
   const allocation: FeeAllocation = {
     companyReserveCents,
@@ -58,7 +93,7 @@ export function allocateRegistrationFee(feeCents: number = REGISTRATION_FEE_CENT
     generationPoolCents +
     rankPoolContributionCents +
     leadershipPoolContributionCents;
-  const expectedCommunityPool = feeCents * FEE_SPLIT.communityPool;
+  const expectedCommunityPool = (feeCents * FEE_SPLIT_BPS.communityPool) / 10_000;
 
   // §12: company_reserve + community_pool must equal the full fee, to the cent.
   if (companyReserveCents + communityPool !== feeCents || communityPool !== expectedCommunityPool) {
@@ -74,6 +109,9 @@ export function allocateRegistrationFee(feeCents: number = REGISTRATION_FEE_CENT
 /**
  * §7 — Distribute realized trading profit: 60% client / 10% sponsor / 30% company.
  * Mirrors spec pseudocode `distributeTradingProfitShare(client, periodRealizedProfit)`.
+ *
+ * Rounding: largest-remainder, so the three shares always sum to the profit
+ * exactly and never contain fractional cents — for any profit value.
  *
  * @param periodRealizedProfitCents Realized profit for the settlement period, in cents.
  * @returns the three shares, or null if profit <= 0 (loss/breakeven → NO split, nobody paid).
@@ -91,9 +129,11 @@ export function distributeTradingProfitShare(
   // §7: loss or breakeven → no split occurs, no party is paid or charged.
   if (periodRealizedProfitCents <= 0) return null;
 
-  const clientCents = periodRealizedProfitCents * TRADING_PROFIT_SPLIT.client;
-  const sponsorCents = periodRealizedProfitCents * TRADING_PROFIT_SPLIT.sponsor;
-  const companyCents = periodRealizedProfitCents * TRADING_PROFIT_SPLIT.company;
+  const [clientCents, sponsorCents, companyCents] = splitByBps(periodRealizedProfitCents, [
+    TRADING_PROFIT_SPLIT_BPS.client,
+    TRADING_PROFIT_SPLIT_BPS.sponsor,
+    TRADING_PROFIT_SPLIT_BPS.company,
+  ]) as [number, number, number];
 
   const shares: TradingProfitShares = { clientCents, sponsorCents, companyCents };
 
