@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import * as schema from '@copinex/database';
@@ -31,10 +31,22 @@ import {
   listAllBrokers,
   listAllPammConnections,
 } from '../services/pamm-service.js';
+import { listAuditLog, logAdminAction } from '../services/audit.js';
 
 export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireAdmin);
+
+/** The audit trail itself â€” newest first. ?limit=1..500 (default 100). */
+adminRouter.get('/audit', async (req, res, next) => {
+  try {
+    const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 100;
+    const entries = await listAuditLog(Number.isFinite(limit) ? limit : 100);
+    res.json({ entries });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /** All packages, including inactive. */
 adminRouter.get('/investments/packages', async (_req, res, next) => {
@@ -61,6 +73,14 @@ adminRouter.post('/investments/packages', async (req, res, next) => {
   try {
     const body = createPackageSchema.parse(req.body);
     const pkg = await createPackage(body);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'PACKAGE_CREATE',
+      targetType: 'investment_package',
+      targetId: pkg?.id,
+      details: body,
+      ip: req.ip,
+    });
     res.status(201).json({ package: pkg });
   } catch (e) {
     next(e);
@@ -73,6 +93,14 @@ adminRouter.patch('/investments/packages/:id', async (req, res, next) => {
   try {
     const body = updatePackageSchema.parse(req.body);
     const pkg = await updatePackage(req.params.id, body);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'PACKAGE_UPDATE',
+      targetType: 'investment_package',
+      targetId: pkg?.id,
+      details: body,
+      ip: req.ip,
+    });
     res.json({ package: pkg });
   } catch (e) {
     next(e);
@@ -94,17 +122,24 @@ adminRouter.get('/investments', async (req, res, next) => {
   }
 });
 
-/** Close an investment (stops accrual; no principal refund — documented assumption). */
+/** Close an investment (stops accrual; no principal refund â€” documented assumption). */
 adminRouter.post('/investments/:id/close', async (req, res, next) => {
   try {
     const investment = await closeInvestment(req.params.id);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'INVESTMENT_CLOSE',
+      targetType: 'investment',
+      targetId: investment.id,
+      ip: req.ip,
+    });
     res.json({ investment });
   } catch (e) {
     next(e);
   }
 });
 
-// ── Money rails (Phase 1) ──────────────────────────────
+// â”€â”€ Money rails (Phase 1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const depositSchema = z.object({
   userId: z.string().uuid(),
@@ -117,6 +152,14 @@ adminRouter.post('/wallets/deposit', async (req, res, next) => {
   try {
     const body = depositSchema.parse(req.body);
     const deposit = await adminDeposit(body.userId, body.amountCents, req.user!.id, body.note);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'WALLET_DEPOSIT',
+      targetType: 'wallet',
+      targetId: body.userId,
+      details: { amountCents: body.amountCents, note: body.note },
+      ip: req.ip,
+    });
     res.status(201).json({ deposit });
   } catch (e) {
     next(e);
@@ -134,28 +177,43 @@ adminRouter.get('/wallets/withdrawals', async (req, res, next) => {
   }
 });
 
-/** Approve a PENDING withdrawal — the manual payout trigger. Optional payoutTxid records the on-chain USDT transfer. */
+/** Approve a PENDING withdrawal â€” the manual payout trigger. Optional payoutTxid records the on-chain USDT transfer. */
 adminRouter.post('/wallets/withdrawals/:id/approve', async (req, res, next) => {
   try {
     const payoutTxid = typeof req.body?.payoutTxid === 'string' ? req.body.payoutTxid.trim() || undefined : undefined;
     const request = await approveWithdrawal(req.params.id, req.user!.id, payoutTxid);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'WITHDRAWAL_APPROVE',
+      targetType: 'withdrawal_request',
+      targetId: request?.id,
+      details: { payoutTxid: payoutTxid ?? null },
+      ip: req.ip,
+    });
     res.json({ request });
   } catch (e) {
     next(e);
   }
 });
 
-/** Reject a PENDING withdrawal — held funds are refunded to the wallet. */
+/** Reject a PENDING withdrawal â€” held funds are refunded to the wallet. */
 adminRouter.post('/wallets/withdrawals/:id/reject', async (req, res, next) => {
   try {
     const request = await rejectWithdrawal(req.params.id, req.user!.id);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'WITHDRAWAL_REJECT',
+      targetType: 'withdrawal_request',
+      targetId: request?.id,
+      ip: req.ip,
+    });
     res.json({ request });
   } catch (e) {
     next(e);
   }
 });
 
-// ── Compensation engine (Phase 2) ───────────────────────
+// â”€â”€ Compensation engine (Phase 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Pool balances (RANK_BONUS, LEADERSHIP_BONUS). */
 adminRouter.get('/pools', async (_req, res, next) => {
@@ -174,14 +232,22 @@ const settlementSchema = z.object({
 });
 
 /**
- * Record + process one client-period trading settlement (§7). Idempotent per
- * (client, period) — 409 on a duplicate. The client's 60% stays on their own
+ * Record + process one client-period trading settlement (Â§7). Idempotent per
+ * (client, period) â€” 409 on a duplicate. The client's 60% stays on their own
  * funded account; the sponsor's 10% is credited to the COPINEX wallet.
  */
 adminRouter.post('/settlements', async (req, res, next) => {
   try {
     const body = settlementSchema.parse(req.body);
     const settlement = await recordSettlement(body);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'SETTLEMENT_RECORD',
+      targetType: 'trading_settlement',
+      targetId: settlement.id,
+      details: body,
+      ip: req.ip,
+    });
     res.status(201).json({ settlement });
   } catch (e) {
     next(e);
@@ -197,7 +263,7 @@ adminRouter.get('/settlements', async (_req, res, next) => {
   }
 });
 
-/** FLAGGED rank milestones awaiting pool-funded payment (§10). */
+/** FLAGGED rank milestones awaiting pool-funded payment (Â§10). */
 adminRouter.get('/ranks/milestones', async (_req, res, next) => {
   try {
     const milestones = await listFlaggedMilestones();
@@ -211,6 +277,13 @@ adminRouter.get('/ranks/milestones', async (_req, res, next) => {
 adminRouter.post('/ranks/milestones/:id/pay', async (req, res, next) => {
   try {
     const milestone = await payFlaggedMilestone(req.params.id);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'MILESTONE_PAY',
+      targetType: 'rank_milestone',
+      targetId: milestone?.id,
+      ip: req.ip,
+    });
     res.json({ milestone });
   } catch (e) {
     next(e);
@@ -232,13 +305,20 @@ adminRouter.get('/ranks/leadership', async (req, res, next) => {
 adminRouter.post('/ranks/leadership/:id/fulfill', async (req, res, next) => {
   try {
     const reward = await fulfillLeadershipReward(req.params.id);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'LEADERSHIP_FULFILL',
+      targetType: 'leadership_reward',
+      targetId: reward?.id,
+      ip: req.ip,
+    });
     res.json({ reward });
   } catch (e) {
     next(e);
   }
 });
 
-// ── PAMM Service (admin) ───────────────────────────────
+// â”€â”€ PAMM Service (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** All brokers, including deactivated. */
 adminRouter.get('/brokers', async (_req, res, next) => {
@@ -260,6 +340,14 @@ adminRouter.post('/brokers', async (req, res, next) => {
   try {
     const body = createBrokerSchema.parse(req.body);
     const broker = await createBroker(body);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'BROKER_CREATE',
+      targetType: 'broker',
+      targetId: broker.id,
+      details: body,
+      ip: req.ip,
+    });
     res.status(201).json({ broker });
   } catch (e) {
     next(e);
@@ -270,6 +358,13 @@ adminRouter.post('/brokers', async (req, res, next) => {
 adminRouter.delete('/brokers/:id', async (req, res, next) => {
   try {
     const broker = await deactivateBroker(req.params.id);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'BROKER_DEACTIVATE',
+      targetType: 'broker',
+      targetId: broker.id,
+      ip: req.ip,
+    });
     res.json({ broker });
   } catch (e) {
     next(e);
@@ -299,13 +394,20 @@ adminRouter.get('/members', async (req, res, next) => {
 });
 
 /**
- * Activate a member's membership — records the $50 activation fee as paid
+ * Activate a member's membership â€” records the $50 activation fee as paid
  * (Active Member policy, 2026-09-26). Interim rail until the payment provider
  * webhook lands; the webhook calls the same service function.
  */
 adminRouter.post('/members/:id/activate', async (req, res, next) => {
   try {
     const member = await activateMembership(req.params.id);
+    await logAdminAction({
+      adminId: req.user!.id,
+      action: 'MEMBER_ACTIVATE',
+      targetType: 'member',
+      targetId: member.id,
+      ip: req.ip,
+    });
     res.json({ member });
   } catch (e) {
     next(e);

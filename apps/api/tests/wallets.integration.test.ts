@@ -13,7 +13,7 @@ async function resetDb() {
     TRUNCATE TABLE investment_commissions, investment_earnings, investments,
     investment_packages, ledger_entries, wallets, users, registrations, fee_allocations,
     bonus_payouts, rank_milestones, leadership_rewards, team_volume, trading_settlements,
-    withdrawal_requests, config CASCADE
+    withdrawal_requests, admin_audit_log, config CASCADE
   `);
   await pool.query(
     `INSERT INTO investment_packages (tier, name, min_amount_cents, max_amount_cents, monthly_rate_bps, daily_rate_bps, status)

@@ -507,3 +507,35 @@ export const pammConnections = pgTable(
     index('pamm_connections_broker_idx').on(t.brokerId),
   ],
 );
+
+/**
+ * Admin audit trail (R27) — append-only record of every mutating admin action.
+ * Written by the API after the action succeeds; never updated or deleted.
+ * `details` is a JSON snapshot of the request body (and any response context
+ * worth keeping) so a dispute can be reconstructed without the live row.
+ */
+export const adminAuditLog = pgTable(
+  'admin_audit_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    adminId: uuid('admin_id')
+      .notNull()
+      .references(() => users.id),
+    /** Machine action name, e.g. 'WITHDRAWAL_APPROVE' — stable API for tooling. */
+    action: text('action').notNull(),
+    /** What the action touched, e.g. 'withdrawal_request'. */
+    targetType: text('target_type').notNull(),
+    /** The target row id when the action is about one specific row. */
+    targetId: uuid('target_id'),
+    /** Request body snapshot (money amounts, notes, payout txids, …). */
+    details: jsonb('details'),
+    /** Client IP — RFC-compliant v4/v6 max length is 45. */
+    ip: text('ip').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('admin_audit_admin_idx').on(t.adminId),
+    index('admin_audit_created_idx').on(t.createdAt),
+    index('admin_audit_target_idx').on(t.targetType, t.targetId),
+  ],
+);

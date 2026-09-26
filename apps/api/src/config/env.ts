@@ -36,4 +36,38 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+const env = parsed.data;
+
+/**
+ * Production guard — refuse to boot on dev-only values. The cost of a
+ * placeholder secret reaching production is forgeable tokens and fake
+ * webhooks; the cost of a false boot failure is a visible crash. Fail loud.
+ */
+const DEV_PLACEHOLDERS: Array<{ name: string; value: string }> = [
+  { name: 'JWT_SECRET', value: 'copinex-dev-secret-change-me-2026-09-25-32chars' },
+  { name: 'PAY2CRYPTO_WEBHOOK_SECRET', value: 'copinex-dev-webhook-secret-0123456789' },
+];
+
+if (env.NODE_ENV === 'production') {
+  const offenders = DEV_PLACEHOLDERS.filter((p) => process.env[p.name] === p.value);
+  if (offenders.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '❌ Refusing to boot in production with dev placeholder values:',
+      offenders.map((o) => o.name).join(', '),
+      '— generate real secrets (openssl rand -base64 48) and set them in the environment.',
+    );
+    process.exit(1);
+  }
+  // Mock payment mode must never serve real money. All three vars are required.
+  if (!env.PAY2CRYPTO_API_URL || !env.PAY2CRYPTO_TOKEN) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '❌ Refusing to boot in production without the Pay2Crypto rail configured',
+      '(PAY2CRYPTO_API_URL + PAY2CRYPTO_TOKEN). Mock mode is for development only.',
+    );
+    process.exit(1);
+  }
+}
+
+export { env };

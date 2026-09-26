@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { logger } from './config/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
@@ -16,6 +17,11 @@ import { webhooksRouter } from './routes/webhooks.js';
 export function createApp() {
   const app = express();
 
+  // Security headers: X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+  // HSTS (production only), and a default CSP. The API serves JSON only, so the
+  // strict default CSP is safe here — it exists to protect against HTML/JSON
+  // sniffing attacks and drive-by script injection if a route ever renders.
+  app.use(helmet());
   app.use(pinoHttp({ logger }));
   app.use(express.json({ limit: '1mb' }));
   app.use('/api', globalLimiter);

@@ -21,6 +21,10 @@ logs/
 npm-debug.log*
 pnpm-debug.log*
 
+# Service supervisor artifacts
+*.pid
+*.err
+
 # Test coverage
 coverage/
 .nyc_output/

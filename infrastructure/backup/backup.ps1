@@ -30,7 +30,18 @@ if (-not (Test-Path $pgDump)) { throw "pg_dump not found at $pgDump" }
 if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }
 
 if (-not $env:PGPASSWORD) {
-  if (-not $DbPassword) { throw "No password: set `$env:PGPASSWORD or pass -DbPassword" }
+  if (-not $DbPassword) {
+    # Fall back to the password in platform/.env (gitignored) so the scheduled
+    # task needs no embedded credentials. Parse it from DATABASE_URL.
+    $envFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) ".env"
+    if (Test-Path $envFile) {
+      $line = (Get-Content $envFile | Where-Object { $_ -match "^DATABASE_URL=" } | Select-Object -First 1)
+      if ($line) {
+        $DbPassword = [regex]::Match($line, "://[^:]+:([^@]+)@").Groups[1].Value
+      }
+    }
+    if (-not $DbPassword) { throw "No password: set `$env:PGPASSWORD, pass -DbPassword, or add DATABASE_URL to platform/.env" }
+  }
   $env:PGPASSWORD = $DbPassword
 }
 
