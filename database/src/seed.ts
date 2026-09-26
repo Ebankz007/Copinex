@@ -66,8 +66,8 @@ async function main() {
     },
     {
       key: 'investment.availableAfterDays',
-      value: 99,
-      description: 'Days until the first 90 days of profit become withdrawable.',
+      value: 90,
+      description: 'Settlement period: days until the first 90 days of profit become withdrawable.',
     },
   ];
   for (const row of configRows) {

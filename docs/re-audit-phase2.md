@@ -148,7 +148,7 @@ Full stack, 25 engine + 18 API tests, live E2E reconciled. `UPLINE_COMMISSION_SP
 **Spec:** monthly settlement "assumed"; the investment package locks daily credits until day 99 (90 accrual + 9 settlement).
 **Built:** `AVAILABLE_AFTER_DAYS = 99`; after day 99, profit credits monthly at calendar boundaries.
 **The question:** is the 9-day gap the intended settlement window, or should credits unlock at day 90?
-**Recommendation:** **keep 99, and make it config-driven.** The 9-day window is float — time to reconcile and settle before money becomes withdrawable. That is the conservative, defensible reading of "settlement period," and it's a one-line constant (`AVAILABLE_AFTER_DAYS`) if compliance ever says otherwise. The real question underneath is Q4: **what is the settlement rail that the 9 days are buying time for?**
+**Decision (Henry, 2026-09-26):** **the settlement period is 90 days.** After 90 days, the locked accrued interest from the invested capital becomes available for withdrawal from the client wallet. `AVAILABLE_AFTER_DAYS` changed 99 → 90: daily credits (days 1–90) unlock together at day 90; monthly profit credits start the day after. No separate 9-day float — the 90-day accrual period IS the settlement period.
 
 ### Q4 — Payment provider: who collects the $50, and who pays out?
 **Spec:** TBD. **Built:** registration fee assumed PAID out-of-band; admin deposit endpoint is the interim rail; withdrawals exist (request/approve/reject) but no real payout rail.

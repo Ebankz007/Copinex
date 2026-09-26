@@ -100,11 +100,11 @@ export interface DailyCredit {
   day: number;
   amountCents: number;
   creditedAt: Date;
-  /** All daily credits unlock together on day 99. */
+  /** All daily credits unlock together after the 90-day settlement period. */
   availableAt: Date;
 }
 
-/** One monthly credit after the 99-day window. Capital stays active indefinitely. */
+/** One monthly credit after the 90-day window. Capital stays active indefinitely. */
 export interface MonthlyCredit {
   /** Calendar month key, e.g. 'M2026-10'. */
   period: string;
@@ -115,7 +115,7 @@ export interface MonthlyCredit {
 /** The full earning schedule for an investment. */
 export interface InvestmentSchedule {
   dailyCredits: DailyCredit[];
-  /** Monthly profit in cents — credited each calendar month after day 99. */
+  /** Monthly profit in cents — credited each calendar month after day 90. */
   monthlyProfitCents: number;
 }
 

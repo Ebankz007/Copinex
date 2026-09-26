@@ -510,7 +510,7 @@ export async function closeInvestment(investmentId: string) {
 /**
  * Calendar-month boundaries strictly after `from` and up to `to`.
  * Monthly profit is credited on the 1st of each month; the first credit is
- * the first 1st after the 99-day availability date. (Documented assumption.)
+ * the first 1st after the 90-day availability date. (Documented assumption.)
  */
 function monthlyPeriodsBetween(from: Date, to: Date): { period: string; boundaryDate: Date }[] {
   const periods: { period: string; boundaryDate: Date }[] = [];

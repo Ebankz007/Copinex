@@ -81,7 +81,7 @@ async function insertInvestment(userId: string, packageId: string, principalCent
     `INSERT INTO investments (user_id, package_id, principal_cents, status, start_date, accrual_end_date, available_date)
      VALUES ($1, $2, $3, 'ACTIVE', $4, $5, $6)
      RETURNING id`,
-    [userId, packageId, principalCents, startDate, addDays(startDate, 90), addDays(startDate, 99)],
+    [userId, packageId, principalCents, startDate, addDays(startDate, 90), addDays(startDate, 90)],
   );
   return res.rows[0].id as string;
 }
@@ -222,7 +222,7 @@ describe('create investment', () => {
 });
 
 describe('accrual job', () => {
-  it('credits daily profit, unlocks at day 99, credits monthly profit + 20% upline commissions', async () => {
+  it('credits daily profit, unlocks after the 90-day settlement period, credits monthly profit + 20% upline commissions', async () => {
     // Chain: alice (admin) → bob → carol
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', 'password123', alice.user.id);
@@ -231,7 +231,7 @@ describe('accrual job', () => {
     const admin = await login('alice@test.dev');
 
     // Carol invests $100 (tier 1) backdated so that, as of 2026-12-15:
-    //   start = asOf - 120d → 90 daily credits done, available (start+99) passed,
+    //   start = asOf - 120d → 90 daily credits done, available (start+90) passed,
     //   and one calendar-month boundary (Dec 1) has passed.
     const asOf = new Date('2026-12-15T00:00:00Z');
     const start = addDays(asOf, -120);

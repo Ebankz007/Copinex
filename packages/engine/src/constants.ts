@@ -123,8 +123,13 @@ export const COMPRESSION_STOP_AT_GEN = 6;
 /** Days of daily profit accrual at the start of an investment. */
 export const DAILY_ACCRUAL_DAYS = 90;
 
-/** Lock on the first 90 days of profit — withdrawable only after day 99. */
-export const AVAILABLE_AFTER_DAYS = 99;
+/**
+ * Settlement period — the 90-day window after which the locked accrued
+ * interest becomes withdrawable from the client wallet (Henry, 2026-09-26).
+ * Daily credits (days 1–90) unlock together on this day; monthly profit
+ * credits start the day after.
+ */
+export const AVAILABLE_AFTER_DAYS = 90;
 
 /** The five investment tiers. maxAmountCents = null means no upper bound. */
 export const INVESTMENT_PACKAGES = [

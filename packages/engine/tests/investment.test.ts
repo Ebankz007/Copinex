@@ -1,6 +1,6 @@
 /**
  * 90-Day Investment Packages — engine tests.
- * Covers tier selection, daily/monthly math, the 90/99-day schedule,
+ * Covers tier selection, daily/monthly math, the 90-day settlement schedule,
  * and the 20% upline commission (reconciliation to the cent).
  */
 import { describe, expect, it } from 'vitest';
@@ -70,11 +70,11 @@ describe('profit math (integer cents)', () => {
   });
 });
 
-describe('90/99-day schedule', () => {
+describe('90-day settlement schedule', () => {
   const pkg = INVESTMENT_PACKAGES[0]; // 10% monthly
   const schedule = buildInvestmentSchedule(50_00, pkg, START);
 
-  it('produces exactly 90 daily credits, all unlocking on day 99', () => {
+  it('produces exactly 90 daily credits, all unlocking after the 90-day settlement period', () => {
     expect(schedule.dailyCredits).toHaveLength(DAILY_ACCRUAL_DAYS);
     for (const c of schedule.dailyCredits) {
       expect(c.amountCents).toBe(16);
@@ -92,7 +92,7 @@ describe('90/99-day schedule', () => {
     expect(total).toBeLessThanOrEqual(3 * schedule.monthlyProfitCents);
   });
 
-  it('monthly profit continues after the 99-day window (capital stays active)', () => {
+  it('monthly profit continues after the 90-day window (capital stays active)', () => {
     expect(schedule.monthlyProfitCents).toBe(500); // $5.00/month on $50
   });
 });

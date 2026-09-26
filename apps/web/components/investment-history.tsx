@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AVAILABLE_AFTER_DAYS } from "@copinex/engine";
 import {
   fetchInvestments,
   fetchWallet,
@@ -81,7 +82,7 @@ export function InvestmentHistory() {
           </div>
         </div>
         <p className="mt-3 text-[11px] text-mist">
-          Locked profit unlocks {formatDate(new Date(Date.now() + 99 * 86400000))} at the latest.
+          Locked profit unlocks {formatDate(new Date(Date.now() + AVAILABLE_AFTER_DAYS * 86400000))} at the latest.
         </p>
       </section>
 

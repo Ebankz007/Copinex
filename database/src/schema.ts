@@ -315,7 +315,7 @@ export const investmentPackages = pgTable(
   (t) => [uniqueIndex('investment_packages_tier_idx').on(t.tier)],
 );
 
-/** A member's investment. Capital stays active after the 99-day window. */
+/** A member's investment. Capital stays active after the 90-day settlement period. */
 export const investments = pgTable(
   'investments',
   {

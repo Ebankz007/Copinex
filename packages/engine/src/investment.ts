@@ -7,8 +7,8 @@
  *  1. Five tiers, selected by principal: $50–$499 → 10%/mo, $500–$999 → 11%/mo,
  *     $1,000–$1,999 → 12%/mo, $2,000–$4,999 → 13.5%/mo, $5,000+ → 15%/mo.
  *  2. First 90 days: daily profit accrues into the Withdrawal Wallet (LOCKED),
- *     withdrawable only after day 99.
- *  3. After day 99: profit is credited monthly; the original capital stays active
+ *     withdrawable only after the 90-day settlement period ends (day 90).
+ *  3. After day 90: profit is credited monthly; the original capital stays active
  *     and keeps earning indefinitely.
  *  4. An ADDITIONAL 20% of each account's monthly profit is paid to its upline
  *     chain as commission (compression applied, per the networking structure).
@@ -87,8 +87,9 @@ export function computeMonthlyProfitCents(principalCents: number, monthlyRateBps
 
 /**
  * Build the earning schedule for an investment:
- *  - 90 daily credits (days 1–90), each unlocking on day 99;
- *  - the monthly profit amount credited each calendar month after day 99.
+ *  - 90 daily credits (days 1–90), unlocking together after the 90-day
+ *    settlement period (day 90);
+ *  - the monthly profit amount credited each calendar month after day 90.
  */
 export function buildInvestmentSchedule(
   principalCents: number,
