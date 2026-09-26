@@ -15,10 +15,10 @@
 `allocation.ts` splits via largest-remainder (buckets always reconcile to the cent). §12 invariant enforced in-code with a throw. **DB-level:** migration 0002 adds bucket non-negativity CHECKs and the `fee_allocation_sum_check` trigger (split must equal the registration fee). The audit's "zero CHECK constraints" (HIGH) is closed.
 
 ### §3 — Direct Referral $15 (R4) — ✅ COMPLIANT
-`bonuses.ts`: 30% of fee, one level, once, Active-gated + compression (§9.2). Wired in the registration pipeline: wallet credit + ledger entry + `bonus_payouts` row with `compressed` flag. Unallocated share (no qualified upline) stays in the community pool — tracked on the `fee_allocations` row.
+`bonuses.ts`: 30% of fee, one level, once, paid to the natural direct sponsor (earning is not gated on Active status — Henry, 2026-09-26). Wired in the registration pipeline: wallet credit + ledger entry + `bonus_payouts` row. Unallocated share (no direct sponsor) stays in the community pool — tracked on the `fee_allocations` row.
 
 ### §4 — Generation Bonus Gen 2–6 (R6) — ✅ COMPLIANT
-`4/2/1.5/1.5/1%` → $2/$1/$0.75/$0.75/$0.50. Nth-qualified-upline resolution, compression-aware, one payout per tier. Same wallet/ledger/payouts wiring as §3.
+`4/2/1.5/1.5/1%` → $2/$1/$0.75/$0.75/$0.50. Paid to the natural member at each generation level, one payout per tier. Same wallet/ledger/payouts wiring as §3.
 
 ### §5 — Associate Ranks 1–8 + Rank Pool (R7, R8, R9) — ✅ COMPLIANT
 - Rank pool accrual `+$4/reg` **derived from `allocateRegistrationFee()`** — the accrual can never drift from the allocation.
@@ -34,7 +34,7 @@
 
 ### §7 — Trading Profit Share 60/10/30 (R14, R26) — ✅ ENGINE / ⚠️ OPERATIONS
 - Split 60/10/30, **only on realized profit > 0**; loss/breakeven pays nobody. In-code reconciliation throw.
-- Sponsor Override: Active-gated + compresses like Direct Referral, **config-driven** (`requireActive`, default true). Unallocated share reverts to the company bucket (row always reconciles to 100%).
+- Sponsor Override: paid to the natural direct sponsor, always (earning is not gated on Active status — Henry, 2026-09-26). Unallocated share (no direct sponsor) reverts to the company bucket (row always reconciles to 100%).
 - Client's 60% stays on their own broker-funded account — recorded, never platform-credited. Correct per the custody model.
 - **Gap:** the data source is the admin endpoint (interim). No scheduled settlement job, no broker/PAMM profit feed. **This is now the #1 integration gap after the PAMM pivot** (see §5 below).
 
@@ -42,8 +42,8 @@
 `matrix.ts` decides placement (row left-to-right → least-populated leg, leftmost tie-break); the API recurses down the spillover chain with a depth guard. Recursive-CTE subtree sizing.
 
 ### §9 — Compression + Active policy + rank maintenance (R5, R17, R18) — ⚠️ PARTIAL
-- §9.2 compression: ✅ fully implemented (skip inactive, next qualified, bounded `COMPRESSION_STOP_AT_GEN = 6`, malformed-chain validation).
-- §9.1 Active Member policy: ❌ **the engine is correct but the policy doesn't exist.** `is_active` defaults `true`, `last_activity_at` exists in the schema but **nothing writes it**. Compression is currently decorative — every member is Active, so bonuses always land on the natural upline. This is business question Q1.
+- §9.2 compression: ❌ **removed by decision (Henry, 2026-09-26).** No sponsor override — every account earns regardless of Active status. `compression.ts` deleted; `is_active` no longer affects any earning path.
+- §9.1 Active Member policy: ✅ **resolved (Q1).** `is_active` remains the administrative status flag; `membership_activated` (the paid gate) governs withdraw/invest/PAMM. Earning is universal.
 - §9.3 rank maintenance: ✅ highest rank permanent (progressive evaluation); ⚠️ "perks gated" beyond rewards is not modeled (no perk system).
 
 ### §10 — Pool solvency (R10) — ✅ COMPLIANT
@@ -126,22 +126,23 @@ Full stack, 25 engine + 18 API tests, live E2E reconciled. `UPLINE_COMMISSION_SP
 
 ### Q1 — Active Member policy (§9.1): what makes a member "active"?
 **Spec:** "numeric thresholds not defined" — explicitly deferred.
-**Built:** `is_active` boolean (default true), `last_activity_at` column exists but is never written. Compression reads `is_active` correctly.
-**The stakes:** until this is answered, compression is decorative — every member is Active, bonuses always pay the natural upline, and the §9.2 machinery never engages.
+**Built:** `is_active` boolean (default true), `last_activity_at` column exists but is never written. `membership_activated` (the paid gate) governs withdraw/invest/PAMM.
+**The stakes:** resolved 2026-09-26 — Active = $50 fee paid (see the resolution below). Earning is universal regardless of Active status (Q2).
 **Options:**
-- **(a) Activity window:** touch `last_activity_at` on login/invest/referral; a sweep job flips `is_active=false` after a configurable window (default 90 days). Compression becomes real, automatically.
+- **(a) Activity window:** touch `last_activity_at` on login/invest/referral; a sweep job flips `is_active=false` after a configurable window (default 90 days). (Would only affect admin status display now — earning is not gated on it.)
 - **(b) Funding-based:** Active = funded broker account ≥ $50. Aligns earning with participation but harshly couples the referral layer to the trading side.
 - **(c) Manual:** admin deactivation only (fraud/compliance). Weakest — requires human attention forever.
 **Decision (2026-09-26, Henry):** **Active = the $50 activation fee is paid.** Two distinct concepts, kept deliberately separate:
 - **`membership_activated`** (NEW) — the paid gate. A member registers (link or direct), earns commissions immediately, and sees the whole site, but **cannot withdraw, invest, or connect PAMM** until the fee is collected. Gated by the `requireActivated` middleware (DB lookup, so activation applies without re-login) on POST `/wallets/withdraw`, POST `/investments`, POST `/pamm/connections`. Admin interim rail: GET `/admin/members` (filterable) + POST `/admin/members/:id/activate` (sets `membership_activated`, `activated_at`, flips the registration `PENDING` → `PAID`). The payment-provider webhook will call the same service path.
-- **`is_active`** (existing) — the administrative compression gate, unchanged. Manual deactivation only (option c) for now; an activity-window sweep (option a) can be layered on later without touching the engine.
+- **`is_active`** (existing) — the administrative status flag, unchanged. Manual deactivation only (option c) for now; an activity-window sweep (option a) can be layered on later without touching the engine. **Since 2026-09-26 `is_active` no longer affects earning** — it remains the Q1 gate for withdraw/invest/PAMM only.
 - **Accepted consequence:** bonuses are paid from pools funded by fees that may arrive later — the company carries the float on unactivated members. This is a deliberate product decision, not an accident.
 - **Test coverage:** 6 new integration tests (`tests/activation.integration.test.ts`) — fresh member PENDING/unactivated, commissions still flow pre-payment, all three gates 403 `MEMBERSHIP_NOT_ACTIVATED`, admin list + activate → gates open without re-login, 409 on double-activation, 403 for non-admins. Suite: 62 API + 83 engine = 145, green.
 
 ### Q2 — Sponsor Override Active-gate (§7): does the 10% sponsor share require Active?
 **Spec:** flagged ambiguous.
-**Built:** `requireActive = true` by default — the sponsor share compresses exactly like the Direct Referral Bonus, and the gate is config-driven (flipping is a data edit).
-**Recommendation:** **keep the mirror.** If an inactive sponsor doesn't earn $15 on a referral, they shouldn't earn 10% of trading profit either — consistency is the defensible position, and it's already the default. Confirm with compliance, but no code change is needed.
+**Built (then):** `requireActive = true` by default — the sponsor share compressed exactly like the Direct Referral Bonus, config-driven.
+**Decision (Henry, 2026-09-26):** **no sponsor override — every account earns regardless of Active status.** The sponsor's 10% share is paid to the natural direct sponsor, always. Compression is removed from ALL earning paths: §3 direct referral, §4 generation bonuses, §7 sponsor share, and the investment upline commission. `is_active` now gates only the Q1 monetary activities (withdraw/invest/PAMM), never earning.
+**Shipped (`fc1fb27`→):** engine `compression.ts` deleted; `resolveQualifiedUpline` removed; `compressed` dropped from payout types (DB column kept, always false, documented vestigial); `COMPRESSION_STOP_AT_GEN` renamed `MAX_UPLINE_LEVELS`; both chain CTEs simplified (no `is_active`); tests rewritten to prove an inactive sponsor still earns the $15, the 10% share, and the upline commission.
 **Related (the real gap):** who sets `sponsor_id`? Today it's register-time only, if the client passes it. No referral-link UI, no admin override. Referral links (code → sponsorId) are needed before launch; admin override needs the audit table (R27) to exist first.
 
 ### Q3 — Settlement period: the 99 vs 90 gap

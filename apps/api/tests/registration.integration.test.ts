@@ -37,7 +37,7 @@ async function register(
   return res.body;
 }
 
-/** Mark a member inactive (triggers §9.2 compression on the next registration). */
+/** Mark a member inactive — earning is unaffected (every account earns). */
 async function setInactive(userId: string) {
   await pool.query(`UPDATE users SET is_active = false, status = 'INACTIVE' WHERE id = $1`, [userId]);
 }
@@ -118,7 +118,7 @@ describe('§2 fee allocation + §10 pool accrual', () => {
 });
 
 describe('§3 direct referral bonus', () => {
-  it('pays the active sponsor $15 on the first referral', async () => {
+  it('pays the sponsor $15 on the first referral', async () => {
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', alice.user.id);
 
@@ -157,25 +157,24 @@ describe('§4 generation bonuses', () => {
   });
 });
 
-describe('§9.2 compression', () => {
-  it('compresses the direct bonus to the next active upline when the sponsor is inactive', async () => {
+describe('earning is not gated on Active status', () => {
+  it('pays the inactive sponsor the direct bonus — every account earns', async () => {
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', alice.user.id);
     await setInactive(bob.user.id);
     const carol = await register('carol@test.dev', bob.user.id);
 
-    // bob is inactive → the $15 goes to alice, marked compressed. Gen 2 has no
-    // second qualified member in the window → unallocated (no row).
+    // bob is inactive but still earns: $15 direct. Alice earns gen 2 ($2).
     const rows = await bonusRows(carol.user.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      type: 'DIRECT_REFERRAL_BONUS',
-      amount_cents: 1500,
-      compressed: true,
-      recipient_email: 'alice@test.dev',
-    });
-    expect(await walletBalance(alice.user.id)).toBe(3000); // $15 bob + $15 carol
-    expect(await walletBalance(bob.user.id)).toBe(0);
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'DIRECT_REFERRAL_BONUS', amount_cents: 1500, recipient_email: 'bob@test.dev' }),
+        expect.objectContaining({ type: 'GENERATION_BONUS_GEN2', amount_cents: 200, generation: 2, recipient_email: 'alice@test.dev' }),
+      ]),
+    );
+    expect(await walletBalance(bob.user.id)).toBe(1500); // inactive, still paid
+    expect(await walletBalance(alice.user.id)).toBe(1700); // $15 bob + $2 carol
   });
 });
 

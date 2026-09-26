@@ -112,8 +112,8 @@ export const TRADING_PROFIT_SPLIT_BPS = {
   company: toBps(TRADING_PROFIT_SPLIT.company), // 3000
 } as const;
 
-/** Compression window — how far up the upline to search for a qualified (Active) member. §9.2 */
-export const COMPRESSION_STOP_AT_GEN = 6;
+/** Upline depth — how many sponsor levels exist and are paid (gen 1–6). */
+export const MAX_UPLINE_LEVELS = 6;
 
 // ── 90-Day Investment Packages ────────────────────────
 // Source: Investment Package spec (Henry, 2026-09-25).

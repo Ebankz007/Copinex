@@ -108,10 +108,9 @@ describe('upline commission (20% of profit)', () => {
   const fullChain = [1, 2, 3, 4, 5, 6].map((level) => ({
     userId: `u${level}`,
     level,
-    isActive: true,
   }));
 
-  it('splits a $100 pool across 6 active uplines: 50/20/10/7.5/7.5/5', () => {
+  it('splits a $100 pool across 6 uplines: 50/20/10/7.5/7.5/5', () => {
     const payouts = distributeUplineCommission(100_00, fullChain);
     const byLevel = Object.fromEntries(payouts.map((p) => [p.level, p.amountCents]));
     expect(byLevel[1]).toBe(50_00);
@@ -128,24 +127,6 @@ describe('upline commission (20% of profit)', () => {
     expect(payouts.reduce((s, p) => s + p.amountCents, 0)).toBe(100);
   });
 
-  it('compresses inactive uplines — pool renormalized over qualified levels', () => {
-    const chainWithInactiveSponsor = [
-      { userId: 'u1', level: 1, isActive: false }, // inactive direct sponsor
-      ...fullChain.slice(1),
-    ];
-    const payouts = distributeUplineCommission(100_00, chainWithInactiveSponsor);
-    expect(payouts.find((p) => p.level === 1)).toBeUndefined();
-    // Renormalized over gen2–6 (weights 20/10/7.5/7.5/5, sum 50):
-    // gen2 gets 4000, gen3 2000, gen4 1500, gen5 1500, gen6 1000.
-    const byLevel = Object.fromEntries(payouts.map((p) => [p.level, p.amountCents]));
-    expect(byLevel[2]).toBe(40_00);
-    expect(byLevel[3]).toBe(20_00);
-    expect(byLevel[4]).toBe(15_00);
-    expect(byLevel[5]).toBe(15_00);
-    expect(byLevel[6]).toBe(10_00);
-    expect(payouts.reduce((s, p) => s + p.amountCents, 0)).toBe(100_00);
-  });
-
   it('renormalizes over a partial chain (only 2 uplines)', () => {
     const shortChain = fullChain.slice(0, 2);
     const payouts = distributeUplineCommission(100_00, shortChain);
@@ -154,9 +135,8 @@ describe('upline commission (20% of profit)', () => {
     expect(payouts.reduce((s, p) => s + p.amountCents, 0)).toBe(100_00);
   });
 
-  it('returns [] when no upline is active', () => {
-    const inactive = fullChain.map((m) => ({ ...m, isActive: false }));
-    expect(distributeUplineCommission(100_00, inactive)).toEqual([]);
+  it('returns [] when the chain is empty', () => {
+    expect(distributeUplineCommission(100_00, [])).toEqual([]);
   });
 
   it('returns [] for a zero pool', () => {

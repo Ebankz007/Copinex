@@ -1,6 +1,9 @@
 /**
- * §3 — Direct Referral Bonus & §4 — Generation Bonus, with §9.2 compression.
+ * §3 — Direct Referral Bonus & §4 — Generation Bonus.
  * Extends §11 Test Case 1 (single direct referral) to the full bonus tree.
+ *
+ * Earning rule (Henry, 2026-09-26): every account earns regardless of Active
+ * status — the natural recipient at each level is paid, no compression.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -11,15 +14,15 @@ import {
 } from '../src/bonuses.js';
 import type { UplineMember } from '../src/types.js';
 
-/** Build a chain: each entry is [level, isActive]; userId = `u${level}`. */
-function chain(...members: Array<[level: number, isActive: boolean]>): UplineMember[] {
-  return members.map(([level, isActive]) => ({ userId: `u${level}`, level, isActive }));
+/** Build a chain: each entry is [level]; userId = `u${level}`. */
+function chain(...levels: number[]): UplineMember[] {
+  return levels.map((level) => ({ userId: `u${level}`, level }));
 }
 
 describe('§3 Direct Referral Bonus', () => {
-  it('pays $15.00 (30% of the $50 fee) to the active direct sponsor', () => {
-    const payout = computeDirectReferralPayout(chain([1, true]));
-    expect(payout).toEqual({ recipientId: 'u1', amountCents: 15_00, compressed: false });
+  it('pays $15.00 (30% of the $50 fee) to the direct sponsor', () => {
+    const payout = computeDirectReferralPayout(chain(1));
+    expect(payout).toEqual({ recipientId: 'u1', amountCents: 15_00 });
   });
 
   it('amount derives from the fee × 30%', () => {
@@ -27,14 +30,9 @@ describe('§3 Direct Referral Bonus', () => {
     expect(computeDirectReferralAmountCents(10_000)).toBe(30_00);
   });
 
-  it('compresses to the next qualified upline when the sponsor is inactive', () => {
-    const payout = computeDirectReferralPayout(chain([1, false], [2, true]));
-    expect(payout).toEqual({ recipientId: 'u2', amountCents: 15_00, compressed: true });
-  });
-
-  it('is not paid when no qualified upline exists within the window', () => {
-    const payout = computeDirectReferralPayout(chain([1, false], [2, false]));
-    expect(payout).toEqual({ recipientId: null, amountCents: 15_00, compressed: false });
+  it('is not paid when the member has no direct sponsor', () => {
+    const payout = computeDirectReferralPayout([]);
+    expect(payout).toEqual({ recipientId: null, amountCents: 15_00 });
   });
 });
 
@@ -52,22 +50,22 @@ describe('§4 Generation Bonus', () => {
     expect(() => computeGenerationAmountCents(7)).toThrow();
   });
 
-  it('pays the full tree on a fully-active 6-level chain (TC1 extended)', () => {
-    const payouts = computeGenerationPayouts(chain([1, true], [2, true], [3, true], [4, true], [5, true], [6, true]));
+  it('pays the full tree on a 6-level chain (TC1 extended)', () => {
+    const payouts = computeGenerationPayouts(chain(1, 2, 3, 4, 5, 6));
     expect(payouts).toEqual([
-      { generation: 2, recipientId: 'u2', amountCents: 2_00, compressed: false },
-      { generation: 3, recipientId: 'u3', amountCents: 1_00, compressed: false },
-      { generation: 4, recipientId: 'u4', amountCents: 75, compressed: false },
-      { generation: 5, recipientId: 'u5', amountCents: 75, compressed: false },
-      { generation: 6, recipientId: 'u6', amountCents: 50, compressed: false },
+      { generation: 2, recipientId: 'u2', amountCents: 2_00 },
+      { generation: 3, recipientId: 'u3', amountCents: 1_00 },
+      { generation: 4, recipientId: 'u4', amountCents: 75 },
+      { generation: 5, recipientId: 'u5', amountCents: 75 },
+      { generation: 6, recipientId: 'u6', amountCents: 50 },
     ]);
     // §12: generation pool = $5.00 exactly.
     const total = payouts.reduce((sum, p) => sum + p.amountCents, 0);
     expect(total).toBe(5_00);
   });
 
-  it('leaves a tier unpaid (recipientId null) when no qualified upline exists', () => {
-    const payouts = computeGenerationPayouts(chain([1, true]));
+  it('leaves a tier unpaid (recipientId null) when the chain has no member at that level', () => {
+    const payouts = computeGenerationPayouts(chain(1));
     expect(payouts).toHaveLength(5);
     for (const p of payouts) {
       expect(p.recipientId).toBeNull();
@@ -75,17 +73,9 @@ describe('§4 Generation Bonus', () => {
     }
   });
 
-  it('compresses each tier to the Nth qualified upline', () => {
-    // u2 inactive: Gen 2 → u3 (compressed), Gen 3 → u4 (compressed), Gen 4 → unpaid.
-    const payouts = computeGenerationPayouts(chain([1, true], [2, false], [3, true], [4, true]));
-    expect(payouts[0]).toEqual({ generation: 2, recipientId: 'u3', amountCents: 2_00, compressed: true });
-    expect(payouts[1]).toEqual({ generation: 3, recipientId: 'u4', amountCents: 1_00, compressed: true });
-    expect(payouts[2].recipientId).toBeNull();
-  });
-
   it('reconciles: direct + full generation tree = 40% of the fee ($20.00)', () => {
-    const direct = computeDirectReferralPayout(chain([1, true], [2, true], [3, true], [4, true], [5, true], [6, true]));
-    const gens = computeGenerationPayouts(chain([1, true], [2, true], [3, true], [4, true], [5, true], [6, true]));
+    const direct = computeDirectReferralPayout(chain(1, 2, 3, 4, 5, 6));
+    const gens = computeGenerationPayouts(chain(1, 2, 3, 4, 5, 6));
     const genTotal = gens.reduce((sum, p) => sum + p.amountCents, 0);
     expect(direct.amountCents + genTotal).toBe(20_00);
   });

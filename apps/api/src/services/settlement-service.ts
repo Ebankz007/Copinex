@@ -13,7 +13,7 @@
  * client-period settlement idempotent.
  */
 import { and, desc, eq } from 'drizzle-orm';
-import { COMPRESSION_STOP_AT_GEN, computeTradingSettlement } from '@copinex/engine';
+import { MAX_UPLINE_LEVELS, computeTradingSettlement } from '@copinex/engine';
 import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
 import { HttpError } from '../lib/http-error.js';
@@ -50,7 +50,7 @@ export async function recordSettlement(input: {
       throw new HttpError(409, 'SETTLEMENT_EXISTS', 'A settlement already exists for this client and period');
     }
 
-    const chain = await loadSponsorChain(tx, input.clientId, COMPRESSION_STOP_AT_GEN);
+    const chain = await loadSponsorChain(tx, input.clientId, MAX_UPLINE_LEVELS);
     const settlement = computeTradingSettlement(input.realizedProfitCents, chain);
     if (!settlement) {
       throw new HttpError(400, 'NO_PROFIT', 'Realized profit must be positive for a settlement');

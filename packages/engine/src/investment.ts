@@ -11,16 +11,16 @@
  *  3. After day 90: profit is credited monthly; the original capital stays active
  *     and keeps earning indefinitely.
  *  4. An ADDITIONAL 20% of each account's monthly profit is paid to its upline
- *     chain as commission (compression applied, per the networking structure).
+ *     chain as commission (levels 1–6, weighted).
  *
  * Money rule: ALL values are integer cents. Daily profit uses floor() so the
  * sum of daily credits never exceeds the nominal monthly rate (no overpayment).
  */
 import {
   AVAILABLE_AFTER_DAYS,
-  COMPRESSION_STOP_AT_GEN,
   DAILY_ACCRUAL_DAYS,
   INVESTMENT_PACKAGES,
+  MAX_UPLINE_LEVELS,
   UPLINE_COMMISSION_RATE_BPS,
   UPLINE_COMMISSION_SPLIT,
 } from './constants.js';
@@ -138,13 +138,14 @@ function weightBpsForLevel(level: number): number | null {
 /**
  * Distribute the 20% commission pool across the investor's upline chain.
  *
- * Networking-structure rule (documented assumption): each generation level
- * 1–6 carries a fixed weight. Inactive members at a level are skipped
- * (compression, per §9.2); the pool is renormalized over the qualified levels
- * so exactly 100% of the pool is paid out. Remainder cents (from floor) go to
- * the closest qualified upline via largest-remainder allocation.
+ * Networking-structure rule: each generation level 1–6 carries a fixed weight.
+ * The natural member at each level is paid — every account earns regardless of
+ * Active status (Henry, 2026-09-26). Levels with no member are skipped and the
+ * pool is renormalized over the present levels so exactly 100% of the pool is
+ * paid out. Remainder cents (from floor) go to the closest upline via
+ * largest-remainder allocation.
  *
- * @returns payouts summing EXACTLY to poolCents (or [] if no qualified upline).
+ * @returns payouts summing EXACTLY to poolCents (or [] if no upline exists).
  */
 export function distributeUplineCommission(
   poolCents: number,
@@ -155,10 +156,10 @@ export function distributeUplineCommission(
   }
   if (poolCents === 0) return [];
 
-  // Compression: keep the first ACTIVE member at each level, up to gen 6.
+  // Keep the natural member at each level, up to gen 6.
   const qualified: { recipientId: string; level: number; weightBps: number }[] = [];
-  for (let level = 1; level <= COMPRESSION_STOP_AT_GEN; level++) {
-    const member = chain.find((m) => m.level === level && m.isActive);
+  for (let level = 1; level <= MAX_UPLINE_LEVELS; level++) {
+    const member = chain.find((m) => m.level === level);
     const weight = weightBpsForLevel(level);
     if (member && weight !== null) {
       qualified.push({ recipientId: member.userId, level, weightBps: weight });

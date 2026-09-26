@@ -4,7 +4,7 @@
  *
  * Money math (per $100 realized profit, integer cents):
  *   client 6000 / sponsor 1000 / company 3000 — §7 split.
- *   An unallocated sponsor share (no qualified upline) reverts to the company:
+ *   An unallocated sponsor share (no direct sponsor) reverts to the company:
  *   company_share_cents = 3000 + 1000 = 4000 (nominal sponsor share preserved).
  *
  * Rank pool: +400 per registration; rank-1 reward 3500.
@@ -123,7 +123,7 @@ describe('§7 settlements — record + process', () => {
     expect(await walletBalance(bob.user.id)).toBe(0);
   });
 
-  it('compresses the sponsor share to the next active upline', async () => {
+  it('pays the inactive sponsor the 10% share — every account earns', async () => {
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', alice.user.id);
     const carol = await register('carol@test.dev', bob.user.id);
@@ -137,12 +137,12 @@ describe('§7 settlements — record + process', () => {
       .send({ clientId: carol.user.id, period: '2026-09', realizedProfitCents: 10000 });
     expect(res.status).toBe(201);
 
-    // bob is inactive → alice receives the 10% share.
+    // bob is inactive but still receives the 10% share.
     expect(res.body.settlement.sponsorShareCents).toBe(1000);
-    // alice: $15 direct (bob) + $2 gen2 (carol) + $10 settlement share.
-    expect(await walletBalance(alice.user.id)).toBe(2700);
-    // bob keeps his earned $15 direct bonus but gets NO settlement share.
-    expect(await walletBalance(bob.user.id)).toBe(1500);
+    // bob: $15 direct (carol) + $10 settlement share.
+    expect(await walletBalance(bob.user.id)).toBe(2500);
+    // alice: $15 direct (bob) + $2 gen2 (carol) — no settlement share.
+    expect(await walletBalance(alice.user.id)).toBe(1700);
   });
 
   it('reverts an unallocated sponsor share to the company (no upline)', async () => {

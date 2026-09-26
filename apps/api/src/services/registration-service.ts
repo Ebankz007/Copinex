@@ -27,7 +27,7 @@
  */
 import { eq, sql } from 'drizzle-orm';
 import {
-  COMPRESSION_STOP_AT_GEN,
+  MAX_UPLINE_LEVELS,
   REGISTRATION_FEE_CENTS,
   allocateRegistrationFee,
   computeDirectReferralPayout,
@@ -140,7 +140,7 @@ export async function registerMember(input: {
     await accruePool(tx, 'LEADERSHIP_BONUS', allocation.leadershipPoolContributionCents, at);
 
     // ── 5. §3 direct + §4 generation bonuses ───────────────────────────
-    const chain = await loadSponsorChain(tx, user.id, COMPRESSION_STOP_AT_GEN);
+    const chain = await loadSponsorChain(tx, user.id, MAX_UPLINE_LEVELS);
     const directBonus = computeDirectReferralPayout(chain);
     if (directBonus.recipientId) {
       await creditWallet(
@@ -159,7 +159,6 @@ export async function registerMember(input: {
         amountCents: directBonus.amountCents,
         sourceRegistrationId: registration.id,
         generation: null,
-        compressed: directBonus.compressed,
         status: 'PAID',
         createdAt: at,
       });
@@ -176,7 +175,6 @@ export async function registerMember(input: {
         amountCents: g.amountCents,
         sourceRegistrationId: registration.id,
         generation: g.generation,
-        compressed: g.compressed,
         status: 'PAID',
         createdAt: at,
       });

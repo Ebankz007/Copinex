@@ -2,7 +2,6 @@ export * from './constants.js';
 export * from './types.js';
 export * from './allocation.js';
 export * from './investment.js';
-export * from './compression.js';
 export * from './bonuses.js';
 export * from './matrix.js';
 export * from './ranks.js';

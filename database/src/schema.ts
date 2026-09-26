@@ -205,6 +205,8 @@ export const bonusPayouts = pgTable(
       .notNull()
       .references(() => registrations.id),
     generation: integer('generation'), // null for direct referral
+    // Vestigial: compression was removed 2026-09-26 (every account earns
+    // regardless of Active status). Always false; kept for audit compatibility.
     compressed: boolean('compressed').notNull().default(false),
     status: payoutStatusEnum('status').notNull().default('PAID'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

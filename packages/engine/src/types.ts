@@ -48,7 +48,6 @@ export interface Member {
 export interface DirectReferralPayout {
   recipientId: string | null;
   amountCents: number;
-  compressed: boolean;
 }
 
 /** Generation bonus payout decision for one generation tier. §4. */
@@ -56,7 +55,6 @@ export interface GenerationPayout {
   generation: number;
   recipientId: string | null;
   amountCents: number;
-  compressed: boolean;
 }
 
 /** Associate rank evaluation result. §5. */
@@ -124,7 +122,6 @@ export interface UplineMember {
   userId: string;
   /** 1 = direct sponsor, 2 = sponsor's sponsor, etc. */
   level: number;
-  isActive: boolean;
 }
 
 /** One upline commission payout. */

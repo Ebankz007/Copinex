@@ -4,32 +4,22 @@
  * Realized trading profit splits 60/10/30 (client / sponsor / company), and
  * ONLY when realized profit > 0 — a loss or breakeven period pays nobody.
  *
- * Documented assumption (flagged in the audit, §7 open question): the sponsor's
- * 10% performance share is ACTIVE-gated and compresses exactly like the Direct
- * Referral Bonus (§3) — inactive sponsor → next qualified upline. The gate is
- * config-driven: requireActive=false pays the natural sponsor regardless.
+ * Earning rule (Henry, 2026-09-26): the sponsor's 10% performance share is paid
+ * to the natural direct sponsor regardless of Active status. No compression, no
+ * sponsor override — every account earns.
  *
- * When no qualified upline exists, the 10% share is NOT paid (unallocated) and
- * reverts to the company — the caller credits it to the company bucket.
+ * When the client has no direct sponsor, the 10% share is NOT paid (unallocated)
+ * and reverts to the company — the caller credits it to the company bucket.
  */
 import { distributeTradingProfitShare } from './allocation.js';
-import { resolveQualifiedUpline } from './compression.js';
 import type { UplineMember } from './types.js';
 
 /** Decision for the sponsor's 10% performance share. */
 export interface SponsorOverridePayout {
   recipientId: string | null;
   amountCents: number;
-  /** True when inactive members were skipped to reach the recipient. */
-  compressed: boolean;
-  /** True when no qualified upline exists — the share reverts to the company. */
+  /** True when the client has no direct sponsor — the share reverts to the company. */
   unallocated: boolean;
-}
-
-/** Options for the §7 sponsor override gate. */
-export interface SponsorOverrideOptions {
-  /** Gate the share on Active status + compression. Default: true. */
-  requireActive?: boolean;
 }
 
 /**
@@ -41,32 +31,17 @@ export interface SponsorOverrideOptions {
 export function computeSponsorOverridePayout(
   sponsorShareCents: number,
   chain: UplineMember[],
-  opts: SponsorOverrideOptions = {},
 ): SponsorOverridePayout {
-  const { requireActive = true } = opts;
   if (!Number.isInteger(sponsorShareCents) || sponsorShareCents < 0) {
     throw new Error(
       `computeSponsorOverridePayout: sponsorShareCents must be a non-negative integer, got ${sponsorShareCents}`,
     );
   }
 
-  if (!requireActive) {
-    const sponsor = chain.find((m) => m.level === 1);
-    return sponsor
-      ? { recipientId: sponsor.userId, amountCents: sponsorShareCents, compressed: false, unallocated: false }
-      : { recipientId: null, amountCents: sponsorShareCents, compressed: false, unallocated: true };
-  }
-
-  const qualified = resolveQualifiedUpline(chain, 1);
-  if (!qualified) {
-    return { recipientId: null, amountCents: sponsorShareCents, compressed: false, unallocated: true };
-  }
-  return {
-    recipientId: qualified.member.userId,
-    amountCents: sponsorShareCents,
-    compressed: qualified.compressed,
-    unallocated: false,
-  };
+  const sponsor = chain.find((m) => m.level === 1);
+  return sponsor
+    ? { recipientId: sponsor.userId, amountCents: sponsorShareCents, unallocated: false }
+    : { recipientId: null, amountCents: sponsorShareCents, unallocated: true };
 }
 
 /** The full §7 settlement decision for one client in one period. */
@@ -85,10 +60,9 @@ export interface TradingSettlement {
 export function computeTradingSettlement(
   periodRealizedProfitCents: number,
   chain: UplineMember[],
-  opts: SponsorOverrideOptions = {},
 ): TradingSettlement | null {
   const shares = distributeTradingProfitShare(periodRealizedProfitCents);
   if (!shares) return null;
-  const sponsorOverride = computeSponsorOverridePayout(shares.sponsorCents, chain, opts);
+  const sponsorOverride = computeSponsorOverridePayout(shares.sponsorCents, chain);
   return { clientCents: shares.clientCents, sponsorOverride, companyCents: shares.companyCents };
 }

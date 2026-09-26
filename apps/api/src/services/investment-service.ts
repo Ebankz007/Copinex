@@ -375,7 +375,6 @@ async function payUplineCommissions(
   const members: UplineMember[] = chain.map((c) => ({
     userId: c.id,
     level: c.level,
-    isActive: c.is_active,
   }));
 
   const payouts = distributeUplineCommission(poolCents, members);
@@ -415,17 +414,17 @@ async function payUplineCommissions(
 
 /** Upline chain via recursive CTE: investor at level 0, sponsor at level 1 … */
 async function loadUplineChain(tx: Tx, userId: string, maxLevel: number) {
-  const result = await tx.execute<{ id: string; level: number; is_active: boolean }>(sql`
+  const result = await tx.execute<{ id: string; level: number }>(sql`
     WITH RECURSIVE chain AS (
-      SELECT id, sponsor_id, is_active, 0 AS level
+      SELECT id, sponsor_id, 0 AS level
       FROM users WHERE id = ${userId}
       UNION ALL
-      SELECT u.id, u.sponsor_id, u.is_active, c.level + 1
+      SELECT u.id, u.sponsor_id, c.level + 1
       FROM users u
       JOIN chain c ON u.id = c.sponsor_id
       WHERE c.level < ${maxLevel} AND c.sponsor_id IS NOT NULL
     )
-    SELECT id, level, is_active FROM chain WHERE level > 0 ORDER BY level
+    SELECT id, level FROM chain WHERE level > 0 ORDER BY level
   `);
   return result.rows;
 }
