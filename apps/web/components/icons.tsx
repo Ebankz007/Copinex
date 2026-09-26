@@ -43,6 +43,14 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function TrashIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13M10 11v6M14 11v6" />
+    </Base>
+  );
+}
+
 export function ArrowUpRightIcon(props: IconProps) {
   return (
     <Base {...props}>

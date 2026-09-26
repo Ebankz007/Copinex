@@ -60,6 +60,11 @@ export const investmentStatusEnum = pgEnum('investment_status', ['ACTIVE', 'MATU
 
 export const earningStatusEnum = pgEnum('earning_status', ['LOCKED', 'AVAILABLE']);
 
+export const pammConnectionStatusEnum = pgEnum('pamm_connection_status', [
+  'REQUESTED',
+  'LINKED',
+]);
+
 // ── Tables ─────────────────────────────────────────────
 
 /** Members. Self-referential: sponsor_id (PEM) + placement_parent_id (matrix). §8/§9. */
@@ -408,5 +413,49 @@ export const investmentCommissions = pgTable(
       t.recipientId,
     ),
     index('investment_commissions_recipient_idx').on(t.recipientId),
+  ],
+);
+
+// ── PAMM Service ───────────────────────────────────────
+
+/**
+ * Partner brokers offering PAMM accounts. Admin-managed directory.
+ * `pammLink` is the broker's private PAMM link the client is redirected to
+ * after requesting a connection; the investment happens broker-side.
+ */
+export const brokers = pgTable(
+  'brokers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    code: text('code').notNull(), // 'PU' | 'DV' — displayed on the card
+    pammLink: text('pamm_link').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('brokers_code_idx').on(t.code)],
+);
+
+/**
+ * A client's PAMM connection request. Status stays REQUESTED after the
+ * redirect; LINKED is reserved for when broker-side confirmation exists.
+ */
+export const pammConnections = pgTable(
+  'pamm_connections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    brokerId: uuid('broker_id')
+      .notNull()
+      .references(() => brokers.id),
+    status: pammConnectionStatusEnum('status').notNull().default('REQUESTED'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('pamm_connections_user_idx').on(t.userId),
+    index('pamm_connections_broker_idx').on(t.brokerId),
   ],
 );

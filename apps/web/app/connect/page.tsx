@@ -1,24 +1,54 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   LandmarkIcon,
-  WalletIcon,
+  LinkIcon,
 } from "@/components/icons";
+import { ApiError, BrokerDto, fetchBrokers, requestPammConnection } from "@/lib/api";
 
 const STEPS = [
   { title: "Choose a partner broker", note: null },
-  { title: "Register, verify & deposit", note: "Minimum $50 recommended" },
-  { title: "Return & link your account to the Master Trader", note: null },
-  { title: "Pay $1 processing fee from your Copinex wallet", note: null },
-];
-
-const BROKERS = [
-  { code: "PU", name: "PUPRIME", tagline: "Partner Broker" },
-  { code: "DV", name: "DERIV", tagline: "Partner Broker" },
+  { title: "Request PAMM connection", note: "Free — no processing fee" },
+  { title: "Invest via the broker's private PAMM link", note: "Your funds stay with the broker" },
 ];
 
 export default function ConnectPage() {
+  const [brokers, setBrokers] = useState<BrokerDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchBrokers()
+      .then(setBrokers)
+      .catch(() => setError("Could not load partner brokers. Try again."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSelect(broker: BrokerDto) {
+    setError(null);
+    setRequestingId(broker.id);
+    try {
+      const { redirectUrl } = await requestPammConnection(broker.id);
+      // Redirect the client to the broker's private PAMM link — the
+      // investment happens broker-side.
+      window.location.href = redirectUrl;
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError("Please log in to request a PAMM connection.");
+      } else if (e instanceof ApiError && e.code === "BROKER_INACTIVE") {
+        setError("This broker is no longer accepting connections.");
+      } else {
+        setError("Could not submit the request. Try again.");
+      }
+      setRequestingId(null);
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
       {/* Header */}
@@ -30,7 +60,7 @@ export default function ConnectPage() {
         >
           <ChevronLeftIcon className="h-5 w-5" />
         </Link>
-        <h1 className="text-lg font-bold tracking-tight text-soft">How to Connect</h1>
+        <h1 className="text-lg font-bold tracking-tight text-soft">Connect to PAMM</h1>
       </header>
 
       {/* Steps */}
@@ -55,34 +85,18 @@ export default function ConnectPage() {
               <p className="text-[15px] font-semibold leading-snug text-soft">
                 {step.title}
               </p>
-              {step.note && (
-                <p className="mt-1 text-sm text-mist">{step.note}</p>
-              )}
+              {step.note && <p className="mt-1 text-sm text-mist">{step.note}</p>}
             </div>
           </div>
         ))}
       </section>
 
-      {/* Fee card */}
-      <section className="mt-2 rounded-3xl border border-white/10 bg-navy p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-mist">
-              Available Balance
-            </p>
-            <p className="mt-1.5 text-2xl font-bold text-soft">$0.00</p>
-          </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-green/10 text-green">
-            <WalletIcon className="h-5 w-5" />
-          </div>
-        </div>
-        <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
-          <p className="text-sm font-semibold text-soft">$1 Processing Fee</p>
-          <span className="rounded-full bg-green/15 px-3 py-1 text-[11px] font-semibold text-green">
-            Required for Connection
-          </span>
-        </div>
-      </section>
+      {/* Error */}
+      {error && (
+        <p className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-soft">
+          {error}
+        </p>
+      )}
 
       {/* Partner brokers */}
       <section className="mt-7">
@@ -90,11 +104,21 @@ export default function ConnectPage() {
           Partner Brokers
         </h2>
         <div className="mt-3 space-y-3">
-          {BROKERS.map((broker) => (
-            <Link
-              key={broker.name}
-              href="/connect/steps"
-              className="flex items-center gap-4 rounded-2xl border border-white/10 bg-navy p-4 transition hover:border-green/30 hover:bg-navy-2"
+          {loading && (
+            <p className="py-6 text-center text-sm text-mist">Loading brokers…</p>
+          )}
+          {!loading && brokers.length === 0 && (
+            <p className="py-6 text-center text-sm text-mist">
+              No partner brokers available yet.
+            </p>
+          )}
+          {brokers.map((broker) => (
+            <button
+              key={broker.id}
+              type="button"
+              disabled={requestingId !== null}
+              onClick={() => handleSelect(broker)}
+              className="flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-navy p-4 text-left transition hover:border-green/30 hover:bg-navy-2 disabled:opacity-60"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-green to-teal-2 text-sm font-extrabold text-night">
                 {broker.code}
@@ -103,17 +127,25 @@ export default function ConnectPage() {
                 <span className="block text-[15px] font-bold text-soft">
                   {broker.name}
                 </span>
-                <span className="block text-xs text-mist">{broker.tagline}</span>
+                <span className="block text-xs text-mist">PAMM Partner</span>
               </span>
-              <ChevronRightIcon className="h-4 w-4 text-mist" />
-            </Link>
+              {requestingId === broker.id ? (
+                <span className="text-xs font-semibold text-green">Redirecting…</span>
+              ) : (
+                <ChevronRightIcon className="h-4 w-4 text-mist" />
+              )}
+            </button>
           ))}
         </div>
       </section>
 
       <p className="mt-8 flex items-center justify-center gap-2 text-center text-xs text-mist">
+        <LinkIcon className="h-4 w-4 text-teal" />
+        You invest directly with the broker through their private PAMM link.
+      </p>
+      <p className="mt-2 flex items-center justify-center gap-2 text-center text-xs text-mist">
         <LandmarkIcon className="h-4 w-4 text-teal" />
-        Your funds stay with your broker. Copinex only copies the Master Trader.
+        Your funds stay with your broker. Copinex never holds your PAMM funds.
       </p>
     </main>
   );

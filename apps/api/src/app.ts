@@ -9,6 +9,7 @@ import { investmentsRouter } from './routes/investments.js';
 import { walletsRouter } from './routes/wallets.js';
 import { adminRouter } from './routes/admin.js';
 import { jobsRouter } from './routes/jobs.js';
+import { pammRouter } from './routes/pamm.js';
 
 export function createApp() {
   const app = express();
@@ -24,6 +25,7 @@ export function createApp() {
   app.use('/api/wallets', walletsRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/jobs', jobsRouter);
+  app.use('/api', pammRouter);
 
   // 404 + error handling (must be last)
   app.use(notFoundHandler);

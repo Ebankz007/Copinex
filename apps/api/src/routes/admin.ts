@@ -23,6 +23,12 @@ import {
   payFlaggedMilestone,
 } from '../services/ranks-service.js';
 import { listSettlements, recordSettlement } from '../services/settlement-service.js';
+import {
+  createBroker,
+  deactivateBroker,
+  listAllBrokers,
+  listAllPammConnections,
+} from '../services/pamm-service.js';
 
 export const adminRouter = Router();
 
@@ -224,6 +230,54 @@ adminRouter.post('/ranks/leadership/:id/fulfill', async (req, res, next) => {
   try {
     const reward = await fulfillLeadershipReward(req.params.id);
     res.json({ reward });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── PAMM Service (admin) ───────────────────────────────
+
+/** All brokers, including deactivated. */
+adminRouter.get('/brokers', async (_req, res, next) => {
+  try {
+    const brokers = await listAllBrokers();
+    res.json({ brokers });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const createBrokerSchema = z.object({
+  name: z.string().min(1).max(80),
+  code: z.string().min(1).max(10),
+  pammLink: z.string().min(1).max(500),
+});
+
+adminRouter.post('/brokers', async (req, res, next) => {
+  try {
+    const body = createBrokerSchema.parse(req.body);
+    const broker = await createBroker(body);
+    res.status(201).json({ broker });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Remove a broker from the client-facing list (soft deactivate). */
+adminRouter.delete('/brokers/:id', async (req, res, next) => {
+  try {
+    const broker = await deactivateBroker(req.params.id);
+    res.json({ broker });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** All PAMM connection requests. */
+adminRouter.get('/pamm/connections', async (_req, res, next) => {
+  try {
+    const connections = await listAllPammConnections();
+    res.json({ connections });
   } catch (e) {
     next(e);
   }

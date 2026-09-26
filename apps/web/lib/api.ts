@@ -61,6 +61,25 @@ export interface UserDto {
   createdAt: string;
 }
 
+export interface BrokerDto {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface BrokerAdminDto extends BrokerDto {
+  pammLink: string;
+}
+
+export interface PammConnectionDto {
+  id: string;
+  status: "REQUESTED" | "LINKED";
+  createdAt: string;
+  broker: { id: string; name: string; code: string };
+}
+
 const TOKEN_KEY = "copinex_token";
 
 function getToken(): string | null {
@@ -170,4 +189,63 @@ export async function startInvestment(amountCents: number) {
     method: "POST",
     body: JSON.stringify({ amountCents }),
   });
+}
+
+// ── PAMM service ───────────────────────────────────────
+
+/** Public partner-broker directory (active only). */
+export async function fetchBrokers(): Promise<BrokerDto[]> {
+  const data = await request<{ brokers: BrokerDto[] }>("/brokers");
+  return data.brokers;
+}
+
+/** Submit a PAMM connection request → returns the broker's private link. */
+export async function requestPammConnection(brokerId: string) {
+  return request<{ connection: PammConnectionDto; redirectUrl: string }>(
+    "/pamm/connections",
+    {
+      method: "POST",
+      body: JSON.stringify({ brokerId }),
+    },
+  );
+}
+
+/** The client's own connection requests. */
+export async function fetchMyConnections(): Promise<PammConnectionDto[]> {
+  const data = await request<{ connections: PammConnectionDto[] }>("/pamm/connections");
+  return data.connections;
+}
+
+// ── PAMM service (admin) ───────────────────────────────
+
+export async function fetchAllBrokers(): Promise<BrokerAdminDto[]> {
+  const data = await request<{ brokers: BrokerAdminDto[] }>("/admin/brokers");
+  return data.brokers;
+}
+
+export async function createBroker(input: {
+  name: string;
+  code: string;
+  pammLink: string;
+}): Promise<BrokerAdminDto> {
+  const data = await request<{ broker: BrokerAdminDto }>("/admin/brokers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return data.broker;
+}
+
+export async function removeBroker(brokerId: string): Promise<BrokerAdminDto> {
+  const data = await request<{ broker: BrokerAdminDto }>(
+    `/admin/brokers/${brokerId}`,
+    { method: "DELETE" },
+  );
+  return data.broker;
+}
+
+export async function fetchAllConnections(): Promise<PammConnectionDto[]> {
+  const data = await request<{ connections: PammConnectionDto[] }>(
+    "/admin/pamm/connections",
+  );
+  return data.connections;
 }
