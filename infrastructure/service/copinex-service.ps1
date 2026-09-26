@@ -1,4 +1,4 @@
-# Copinex service supervisor - start/stop/restart/status/watch for API + web.
+﻿# Copinex service supervisor - start/stop/restart/status/watch for API + web.
 #
 # Usage:
 #   .\copinex-service.ps1 start     # start API (:4000) + web (:3000), health-checked
@@ -59,7 +59,7 @@ function Test-Port([int]$Port) {
 }
 
 function Start-One {
-  param([string]$Name, [string]$Cwd, [string]$Exe, [string[]]$Args, [string]$PidFile, [string]$LogFile, [int]$Port, [string]$HealthUrl)
+  param([string]$Name, [string]$Cwd, [string]$Exe, [string[]]$ProcArgs, [string]$PidFile, [string]$LogFile, [int]$Port, [string]$HealthUrl)
 
   $existing = Get-PidFromFile $PidFile
   if ($existing) {
@@ -72,7 +72,7 @@ function Start-One {
   }
 
   Rotate-Log $LogFile
-  $proc = Start-Process -FilePath $Exe -ArgumentList $Args -WorkingDirectory $Cwd `
+  $proc = Start-Process -FilePath $Exe -ArgumentList $ProcArgs -WorkingDirectory $Cwd `
     -RedirectStandardOutput $LogFile -RedirectStandardError "$LogFile.err" `
     -PassThru -WindowStyle Hidden
   Set-Content -Path $PidFile -Value $proc.Id
@@ -110,9 +110,9 @@ function Stop-One {
 
 switch ($Command) {
   'start' {
-    Start-One -Name 'API' -Cwd $apiDir -Exe 'node' -Args @('dist/index.js') `
+    Start-One -Name 'API' -Cwd $apiDir -Exe 'node' -ProcArgs @('dist/index.js') `
       -PidFile $apiPidFile -LogFile $apiLog -Port $API_PORT -HealthUrl $API_HEALTH
-    Start-One -Name 'WEB' -Cwd $webDir -Exe 'node' -Args @('node_modules/next/dist/bin/next', 'start', '-p', "$WEB_PORT") `
+    Start-One -Name 'WEB' -Cwd $webDir -Exe 'node' -ProcArgs @('node_modules/next/dist/bin/next', 'start', '-p', "$WEB_PORT") `
       -PidFile $webPidFile -LogFile $webLog -Port $WEB_PORT -HealthUrl $WEB_HEALTH
   }
   'stop' {
