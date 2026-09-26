@@ -57,6 +57,14 @@ async function fundWallet(userId: string, walletType: string, amountCents: numbe
   );
 }
 
+/** Active Member policy: mark the $50 activation fee paid. */
+async function activate(userId: string) {
+  await pool.query(
+    `UPDATE users SET membership_activated = true, activated_at = now() WHERE id = $1`,
+    [userId],
+  );
+}
+
 async function makeAdmin(userId: string) {
   await pool.query(`UPDATE users SET role = 'ADMIN' WHERE id = $1`, [userId]);
 }
@@ -161,14 +169,16 @@ describe('create investment', () => {
   });
 
   it('rejects insufficient funds', async () => {
-    const { token } = await register('poor@test.dev');
+    const { token, user } = await register('poor@test.dev');
+    await activate(user.id);
     const res = await request(app).post('/api/investments').set(auth(token)).send({ amountCents: 10000 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('INSUFFICIENT_FUNDS');
   });
 
   it('rejects amounts below $50 and non-integers', async () => {
-    const { token } = await register('tiny@test.dev');
+    const { token, user } = await register('tiny@test.dev');
+    await activate(user.id);
     const low = await request(app).post('/api/investments').set(auth(token)).send({ amountCents: 4999 });
     expect(low.status).toBe(400);
     const frac = await request(app).post('/api/investments').set(auth(token)).send({ amountCents: 10000.5 });
@@ -177,6 +187,7 @@ describe('create investment', () => {
 
   it('creates an investment, debits the COPINEX wallet, writes the ledger', async () => {
     const { token, user } = await register('investor@test.dev');
+    await activate(user.id);
     await fundWallet(user.id, 'COPINEX', 100000); // $1,000
 
     const res = await request(app).post('/api/investments').set(auth(token)).send({ amountCents: 10000 });
@@ -202,6 +213,7 @@ describe('create investment', () => {
 
   it('rejects investing more than the wallet holds', async () => {
     const { token, user } = await register('over@test.dev');
+    await activate(user.id);
     await fundWallet(user.id, 'COPINEX', 5000);
     const res = await request(app).post('/api/investments').set(auth(token)).send({ amountCents: 5001 });
     expect(res.status).toBe(400);
@@ -376,6 +388,7 @@ describe('admin package management', () => {
 
     // Close an investment (tier 2 — tier 1 was deactivated above).
     const investor = await register('investor7@test.dev');
+    await activate(investor.user.id);
     await fundWallet(investor.user.id, 'COPINEX', 100000);
     const inv = await request(app)
       .post('/api/investments')
@@ -393,6 +406,7 @@ describe('investment detail', () => {
   it('returns the schedule for the owner, forbids others', async () => {
     const owner = await register('owner@test.dev');
     const stranger = await register('stranger@test.dev');
+    await activate(owner.user.id);
     await fundWallet(owner.user.id, 'COPINEX', 10000);
     const inv = await request(app)
       .post('/api/investments')

@@ -46,40 +46,54 @@ export function DashboardHeader() {
   const avatar = user ? initials(user.fullName, user.email) : "FG";
 
   return (
-    <header className="flex items-start justify-between">
-      <div>
-        <p className="text-sm text-mist">Welcome back,</p>
-        <h1 className="mt-0.5 text-xl font-bold tracking-tight text-soft">{displayName}</h1>
-        <span className="mt-1.5 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-mist">
-          ID: {displayId}
-        </span>
-        {user?.role === "ADMIN" && (
-          <span className="ml-1.5 inline-flex items-center rounded-full border border-green/30 bg-green/10 px-2.5 py-0.5 text-[11px] font-bold text-green">
-            ADMIN
+    <>
+      <header className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-mist">Welcome back,</p>
+          <h1 className="mt-0.5 text-xl font-bold tracking-tight text-soft">{displayName}</h1>
+          <span className="mt-1.5 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-mist">
+            ID: {displayId}
           </span>
-        )}
-      </div>
-      <div className="flex flex-col items-end gap-2">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-green to-teal-2 text-sm font-bold text-night">
-          {avatar}
+          {user?.role === "ADMIN" && (
+            <span className="ml-1.5 inline-flex items-center rounded-full border border-green/30 bg-green/10 px-2.5 py-0.5 text-[11px] font-bold text-green">
+              ADMIN
+            </span>
+          )}
         </div>
-        {loaded && !user && (
-          <Link
-            href="/login"
-            className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-soft transition hover:bg-white/10"
-          >
-            Sign in
-          </Link>
-        )}
-        {loaded && user && (
-          <button
-            onClick={onSignOut}
-            className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-mist transition hover:bg-white/10 hover:text-soft"
-          >
-            Sign out
-          </button>
-        )}
-      </div>
-    </header>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-green to-teal-2 text-sm font-bold text-night">
+            {avatar}
+          </div>
+          {loaded && !user && (
+            <Link
+              href="/login"
+              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-soft transition hover:bg-white/10"
+            >
+              Sign in
+            </Link>
+          )}
+          {loaded && user && (
+            <button
+              onClick={onSignOut}
+              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-mist transition hover:bg-white/10 hover:text-soft"
+            >
+              Sign out
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Active Member policy (2026-09-26): commissions flow before activation,
+          but withdrawals / investments / PAMM unlock once the $50 fee is paid. */}
+      {loaded && user && !user.membershipActivated && (
+        <section className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+          <p className="text-sm font-bold text-amber-300">Activate your membership</p>
+          <p className="mt-1 text-xs text-mist">
+            You are earning commissions — but withdrawals, investments, and PAMM unlock after
+            you pay the one-time $50 activation fee. Contact your sponsor or support to activate.
+          </p>
+        </section>
+      )}
+    </>
   );
 }

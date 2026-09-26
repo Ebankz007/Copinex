@@ -50,6 +50,14 @@ async function fundWallet(userId: string, walletType: string, amountCents: numbe
   );
 }
 
+/** Active Member policy: mark the $50 activation fee paid. */
+async function activate(userId: string) {
+  await pool.query(
+    `UPDATE users SET membership_activated = true, activated_at = now() WHERE id = $1`,
+    [userId],
+  );
+}
+
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 // ── Tests ──────────────────────────────────────────────
@@ -144,6 +152,7 @@ describe('withdrawal flow', () => {
     await makeAdmin(adminReg.user.id);
     const admin = await login('wd-admin@test.dev');
     const member = await register('wd-member@test.dev');
+    await activate(member.user.id);
     await fundWallet(member.user.id, 'WITHDRAWAL', 10000);
 
     // Member requests $50 from the withdrawal wallet.
@@ -200,6 +209,7 @@ describe('withdrawal flow', () => {
     await makeAdmin(adminReg.user.id);
     const admin = await login('wd-admin2@test.dev');
     const member = await register('wd-member2@test.dev');
+    await activate(member.user.id);
     await fundWallet(member.user.id, 'WITHDRAWAL', 10000);
 
     const req = await request(app)
@@ -235,6 +245,7 @@ describe('withdrawal flow', () => {
 
   it('rejects withdrawals above the balance, from both wallet types', async () => {
     const member = await register('wd-member3@test.dev');
+    await activate(member.user.id);
     await fundWallet(member.user.id, 'COPINEX', 1000);
 
     const over = await request(app)
@@ -264,6 +275,7 @@ describe('withdrawal flow', () => {
     await makeAdmin(adminReg.user.id);
     const admin = await login('wd-admin3@test.dev');
     const member = await register('wd-member4@test.dev');
+    await activate(member.user.id);
     await fundWallet(member.user.id, 'WITHDRAWAL', 10000);
 
     await request(app)

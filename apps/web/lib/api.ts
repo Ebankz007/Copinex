@@ -58,6 +58,8 @@ export interface UserDto {
   role: "MEMBER" | "ADMIN";
   status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
   sponsorId: string | null;
+  membershipActivated: boolean;
+  activatedAt: string | null;
   createdAt: string;
 }
 

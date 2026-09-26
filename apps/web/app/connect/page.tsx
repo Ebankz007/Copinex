@@ -8,7 +8,7 @@ import {
   LandmarkIcon,
   LinkIcon,
 } from "@/components/icons";
-import { ApiError, BrokerDto, fetchBrokers, requestPammConnection } from "@/lib/api";
+import { ApiError, BrokerDto, fetchBrokers, fetchMe, requestPammConnection, type UserDto } from "@/lib/api";
 
 const STEPS = [
   { title: "Choose a partner broker", note: null },
@@ -21,13 +21,17 @@ export default function ConnectPage() {
   const [loading, setLoading] = useState(true);
   const [requestingId, setRequestingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [me, setMe] = useState<UserDto | null>(null);
 
   useEffect(() => {
+    fetchMe().then(setMe);
     fetchBrokers()
       .then(setBrokers)
       .catch(() => setError("Could not load partner brokers. Try again."))
       .finally(() => setLoading(false));
   }, []);
+
+  const notActivated = me !== null && !me.membershipActivated;
 
   async function handleSelect(broker: BrokerDto) {
     setError(null);
@@ -40,6 +44,8 @@ export default function ConnectPage() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError("Please log in to request a PAMM connection.");
+      } else if (e instanceof ApiError && e.code === "MEMBERSHIP_NOT_ACTIVATED") {
+        setError("Pay the $50 activation fee to unlock PAMM connections.");
       } else if (e instanceof ApiError && e.code === "BROKER_INACTIVE") {
         setError("This broker is no longer accepting connections.");
       } else {
@@ -98,6 +104,17 @@ export default function ConnectPage() {
         </p>
       )}
 
+      {/* Active Member policy: unactivated members see brokers but cannot connect. */}
+      {notActivated && (
+        <section className="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+          <p className="text-sm font-bold text-amber-300">Activate your membership</p>
+          <p className="mt-1 text-xs text-mist">
+            PAMM connections unlock after you pay the one-time $50 activation fee. You are
+            already earning commissions — contact your sponsor or support to activate.
+          </p>
+        </section>
+      )}
+
       {/* Partner brokers */}
       <section className="mt-7">
         <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-mist">
@@ -116,7 +133,7 @@ export default function ConnectPage() {
             <button
               key={broker.id}
               type="button"
-              disabled={requestingId !== null}
+              disabled={requestingId !== null || notActivated}
               onClick={() => handleSelect(broker)}
               className="flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-navy p-4 text-left transition hover:border-green/30 hover:bg-navy-2 disabled:opacity-60"
             >

@@ -41,6 +41,14 @@ async function makeAdmin(userId: string) {
   await pool.query(`UPDATE users SET role = 'ADMIN' WHERE id = $1`, [userId]);
 }
 
+/** Active Member policy: mark the $50 activation fee paid. */
+async function activate(userId: string) {
+  await pool.query(
+    `UPDATE users SET membership_activated = true, activated_at = now() WHERE id = $1`,
+    [userId],
+  );
+}
+
 async function login(email: string): Promise<{ token: string }> {
   const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
   if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
@@ -174,6 +182,7 @@ describe('PAMM connection requests', () => {
     const brokerId = create.body.broker.id;
 
     const client = await register('client@test.dev');
+    await activate(client.user.id);
     const res = await request(app)
       .post('/api/pamm/connections')
       .set(auth(client.token))
@@ -193,6 +202,7 @@ describe('PAMM connection requests', () => {
 
   it('unknown broker → 404', async () => {
     const client = await register('client@test.dev');
+    await activate(client.user.id);
     const res = await request(app)
       .post('/api/pamm/connections')
       .set(auth(client.token))
@@ -213,6 +223,7 @@ describe('PAMM connection requests', () => {
     await request(app).delete(`/api/admin/brokers/${brokerId}`).set(auth(admin.token));
 
     const client = await register('client@test.dev');
+    await activate(client.user.id);
     const res = await request(app)
       .post('/api/pamm/connections')
       .set(auth(client.token))
@@ -233,6 +244,8 @@ describe('PAMM connection requests', () => {
 
     const c1 = await register('c1@test.dev');
     const c2 = await register('c2@test.dev');
+    await activate(c1.user.id);
+    await activate(c2.user.id);
     await request(app).post('/api/pamm/connections').set(auth(c1.token)).send({ brokerId });
     await request(app).post('/api/pamm/connections').set(auth(c2.token)).send({ brokerId });
 

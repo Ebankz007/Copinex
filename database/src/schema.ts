@@ -80,6 +80,9 @@ export const users = pgTable(
     role: userRoleEnum('role').notNull().default('MEMBER'),
     status: userStatusEnum('status').notNull().default('ACTIVE'),
     isActive: boolean('is_active').notNull().default(true),
+    /** Active Member policy (§9.1, answered 2026-09-26): Active = paid the $50 activation fee. */
+    membershipActivated: boolean('membership_activated').notNull().default(false),
+    activatedAt: timestamp('activated_at', { withTimezone: true }),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
     highestAssociateRank: integer('highest_associate_rank').notNull().default(0),
     highestLeadershipRank: integer('highest_leadership_rank').notNull().default(0),
@@ -145,7 +148,8 @@ export const registrations = pgTable(
       .notNull()
       .references(() => users.id),
     feeCents: integer('fee_cents').notNull().default(5000),
-    status: text('status').notNull().default('PAID'),
+    /** PENDING until the $50 activation fee is collected, then PAID (Active Member policy). */
+    status: text('status').notNull().default('PENDING'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('registrations_user_idx').on(t.userId)],

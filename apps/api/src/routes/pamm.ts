@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.js';
+import { requireActivated, requireAuth } from '../middleware/auth.js';
 import {
   listActiveBrokers,
   listMyPammConnections,
@@ -23,8 +23,8 @@ const requestConnectionSchema = z.object({
   brokerId: z.string().uuid(),
 });
 
-/** Client submits a PAMM connection request → gets the broker's private link. */
-pammRouter.post('/pamm/connections', requireAuth, async (req, res, next) => {
+/** Client submits a PAMM connection request → gets the broker's private link. Active member only. */
+pammRouter.post('/pamm/connections', requireAuth, requireActivated, async (req, res, next) => {
   try {
     const { brokerId } = requestConnectionSchema.parse(req.body);
     const result = await requestPammConnection(req.user!.id, brokerId);

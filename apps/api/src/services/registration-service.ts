@@ -113,9 +113,13 @@ export async function registerMember(input: {
     const at = new Date();
 
     // ── 2. Registration ────────────────────────────────────────────────
+    // Active Member policy (2026-09-26): the $50 activation fee is collected
+    // separately — registration is PENDING until paid. The member earns
+    // commissions immediately (the company carries the float), but monetary
+    // activities (withdraw / invest / PAMM) are gated on activation.
     const [registration] = await tx
       .insert(schema.registrations)
-      .values({ userId: user.id, feeCents: REGISTRATION_FEE_CENTS, status: 'PAID' })
+      .values({ userId: user.id, feeCents: REGISTRATION_FEE_CENTS, status: 'PENDING' })
       .returning();
     if (!registration) throw new HttpError(500, 'INTERNAL_ERROR', 'Failed to create registration');
 

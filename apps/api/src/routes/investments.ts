@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.js';
+import { requireActivated, requireAuth } from '../middleware/auth.js';
 import {
   createInvestment,
   getInvestmentDetail,
@@ -47,8 +47,8 @@ const createSchema = z.object({
   amountCents: z.number().int().min(5000).max(1_000_000_000),
 });
 
-/** Create an investment. Tier is derived server-side from the amount. */
-investmentsRouter.post('/', async (req, res, next) => {
+/** Create an investment. Tier is derived server-side from the amount. Active member only. */
+investmentsRouter.post('/', requireActivated, async (req, res, next) => {
   try {
     const { amountCents } = createSchema.parse(req.body);
     const result = await createInvestment(req.user!.id, amountCents);

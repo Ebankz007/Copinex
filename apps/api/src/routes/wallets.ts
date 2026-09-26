@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware/auth.js';
+import { requireActivated, requireAuth } from '../middleware/auth.js';
 import {
   getWalletBalances,
   listMyWithdrawals,
@@ -26,8 +26,8 @@ const withdrawSchema = z.object({
   amountCents: z.number().int().positive(),
 });
 
-/** Request a withdrawal: funds are held, admin approves or rejects. */
-walletsRouter.post('/withdraw', async (req, res, next) => {
+/** Request a withdrawal: funds are held, admin approves or rejects. Active member only. */
+walletsRouter.post('/withdraw', requireActivated, async (req, res, next) => {
   try {
     const body = withdrawSchema.parse(req.body);
     const request = await requestWithdrawal(req.user!.id, body.walletType, body.amountCents);

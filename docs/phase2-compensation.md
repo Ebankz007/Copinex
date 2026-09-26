@@ -43,7 +43,7 @@ One transaction, all-or-nothing: member + wallets → registration (PAID) → §
 
 ## Design decisions (flagged for the audit)
 
-- **Fee assumed PAID out-of-band.** The payment provider is an open question; the interim rail is the admin deposit endpoint. The registration row records `PAID` by assumption.
+- **Fee collected on activation, not at registration (Active Member policy, 2026-09-26).** The registration row records `PENDING`; the $50 activation fee is collected out-of-band (admin interim rail today, payment-provider webhook later) and flips the row to `PAID` plus `users.membership_activated`. Members earn commissions before paying — the company carries the float — but withdraw/invest/PAMM are gated on activation (`requireActivated` middleware).
 - **Team volume = Σ downline registration fees** ($50 per registration), attributed to the direct leg that leads to the new member. Leg volumes drive the §5 40% cap.
 - **Unallocated shares stay in the community pool.** When no qualified upline exists within the compression window, the direct/generation share is not paid and is tracked via the `fee_allocations` row (no separate balance ledger).
 - **FLAGGED milestones still advance `highest_associate_rank`.** Qualification stands; payment is deferred to admin review (§10 flag-not-pay). The ledger credit references the milestone row (`sourceType 'rank_milestone'`, `sourceId = milestone.id`).
@@ -53,7 +53,7 @@ One transaction, all-or-nothing: member + wallets → registration (PAID) → §
 ## Verification
 
 - Engine: **83/83** (compression duplicate-level validation moved to a full-chain pre-pass; allocation strict-ts fix) · build clean
-- API: **45/45** — 18 investments + 10 compensation-admin + 9 registration + 8 wallets · build clean
+- API: **62/62** — 18 investments + 10 compensation-admin + 9 registration + 8 wallets + 6 activation + 11 PAMM · build clean
 - Registration tests pin the money math to the cent: allocation 2250/1500/500/400/350, direct 1500, gen 200/100/75/75/50, rank-1 3500, rank-2 8000, pool accrual 400/350 per reg, +5000 team volume per leg.
 
 ## Notes

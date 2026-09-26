@@ -31,6 +31,8 @@ function publicUser(u: typeof schema.users.$inferSelect) {
     role: u.role,
     status: u.status,
     sponsorId: u.sponsorId,
+    membershipActivated: u.membershipActivated,
+    activatedAt: u.activatedAt,
     createdAt: u.createdAt,
   };
 }

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
+import { HttpError } from '../lib/http-error.js';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import {
   closeInvestment,
@@ -278,6 +279,74 @@ adminRouter.get('/pamm/connections', async (_req, res, next) => {
   try {
     const connections = await listAllPammConnections();
     res.json({ connections });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Members, optional activation-status filter. Interim ops rail for activation. */
+adminRouter.get('/members', async (req, res, next) => {
+  try {
+    const activated = req.query.activated;
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        fullName: schema.users.fullName,
+        membershipActivated: schema.users.membershipActivated,
+        activatedAt: schema.users.activatedAt,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(
+        activated === 'true'
+          ? eq(schema.users.membershipActivated, true)
+          : activated === 'false'
+            ? eq(schema.users.membershipActivated, false)
+            : undefined,
+      )
+      .orderBy(schema.users.createdAt);
+    res.json({ members: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Activate a member's membership — records the $50 activation fee as paid
+ * (Active Member policy, 2026-09-26). Interim rail until the payment provider
+ * lands; the provider webhook will call the same service function.
+ */
+adminRouter.post('/members/:id/activate', async (req, res, next) => {
+  try {
+    const [user] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, req.params.id))
+      .limit(1);
+    if (!user) throw new HttpError(404, 'NOT_FOUND', 'Member not found');
+    if (user.membershipActivated) throw new HttpError(409, 'ALREADY_ACTIVATED', 'Membership is already activated');
+
+    const at = new Date();
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.users)
+        .set({ membershipActivated: true, activatedAt: at, updatedAt: at })
+        .where(eq(schema.users.id, user.id));
+      await tx
+        .update(schema.registrations)
+        .set({ status: 'PAID' })
+        .where(eq(schema.registrations.userId, user.id));
+    });
+
+    res.json({
+      member: {
+        id: user.id,
+        email: user.email,
+        membershipActivated: true,
+        activatedAt: at,
+      },
+    });
   } catch (e) {
     next(e);
   }

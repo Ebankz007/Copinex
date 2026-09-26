@@ -13,10 +13,12 @@ import {
 } from "@copinex/engine";
 import {
   ApiError,
+  fetchMe,
   fetchPackages,
   isDemoMode,
   startInvestment,
   type PackageDto,
+  type UserDto,
 } from "@/lib/api";
 import { formatBps, formatCents, formatDate } from "@/lib/format";
 import { ChevronLeftIcon, ChevronRightIcon, ShieldCheckIcon, WalletIcon } from "@/components/icons";
@@ -32,8 +34,20 @@ export function InvestmentCenter() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ principalCents: number; availableDate: string } | null>(null);
+  const [me, setMe] = useState<UserDto | null>(null);
 
   const demo = isDemoMode();
+  const notActivated = !demo && me !== null && !me.membershipActivated;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMe().then((u) => {
+      if (!cancelled) setMe(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +141,14 @@ export function InvestmentCenter() {
         </p>
       )}
 
+      {/* Active Member policy: unactivated members see everything but cannot invest. */}
+      {notActivated && (
+        <p className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-xs text-amber-300">
+          Your membership is not yet activated. Pay the one-time $50 activation fee to unlock
+          investments, withdrawals, and PAMM — you are already earning commissions.
+        </p>
+      )}
+
       {/* Calculator */}
       <section className="rounded-3xl border border-white/10 bg-gradient-to-b from-navy-2 to-navy p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-mist">
@@ -185,10 +207,10 @@ export function InvestmentCenter() {
 
         <button
           onClick={handleInvest}
-          disabled={submitting || !selected}
+          disabled={submitting || !selected || notActivated}
           className="mt-5 w-full rounded-2xl bg-green py-3.5 text-[15px] font-bold text-night transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {submitting ? "Processing…" : "Start Investment"}
+          {notActivated ? "Activate to Invest" : submitting ? "Processing…" : "Start Investment"}
         </button>
         {error && <p className="mt-3 text-center text-xs font-medium text-red-400">{error}</p>}
       </section>
