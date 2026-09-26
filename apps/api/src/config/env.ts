@@ -20,6 +20,12 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
   LOG_LEVEL: z.string().default('info'),
+  // Pay2Crypto crypto payment rail (non-custodial, TRC20). Unset = mock mode:
+  // createPayment returns a synthetic checkout URL and webhooks are simulated
+  // in tests. Set all three for live operation.
+  PAY2CRYPTO_API_URL: z.string().url().optional(),
+  PAY2CRYPTO_TOKEN: z.string().min(1).optional(),
+  PAY2CRYPTO_WEBHOOK_SECRET: z.string().min(16).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -54,6 +54,11 @@ export const withdrawalStatusEnum = pgEnum('withdrawal_status', ['PENDING', 'PAI
 
 export const settlementStatusEnum = pgEnum('settlement_status', ['PENDING', 'PROCESSED', 'FAILED']);
 
+/** Crypto payment rail (Pay2Crypto, 2026-09-26): what the invoice pays for. */
+export const paymentPurposeEnum = pgEnum('payment_purpose', ['ACTIVATION', 'DEPOSIT']);
+
+export const paymentStatusEnum = pgEnum('payment_status', ['PENDING', 'PAID', 'EXPIRED', 'FAILED']);
+
 export const walletTypeEnum = pgEnum('wallet_type', ['COPINEX', 'WITHDRAWAL']);
 
 export const investmentStatusEnum = pgEnum('investment_status', ['ACTIVE', 'MATURED', 'CLOSED']);
@@ -381,12 +386,49 @@ export const withdrawalRequests = pgTable(
     /** Admin who approved/rejected. null while PENDING. */
     adminId: uuid('admin_id').references((): any => users.id),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    /** On-chain payout reference (USDT TRC20 txid) recorded by the admin when the manual payout is sent. */
+    payoutTxid: text('payout_txid'),
     note: text('note'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('withdrawal_user_idx').on(t.userId),
     index('withdrawal_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * Crypto payments (Pay2Crypto). One row per invoice created against the
+ * gateway. PENDING → PAID on the confirmation webhook (ACTIVATION activates
+ * the membership, DEPOSIT credits the COPINEX wallet). `paymentRef` is the
+ * join key the gateway echoes back; `gatewayTxid` is the checkout reference.
+ */
+export const payments = pgTable(
+  'payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    purpose: paymentPurposeEnum('purpose').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    currency: text('currency').notNull().default('USDT'),
+    status: paymentStatusEnum('status').notNull().default('PENDING'),
+    /** Merchant-side reference echoed by the gateway (join key for webhooks). */
+    paymentRef: text('payment_ref').notNull(),
+    /** Pay2Crypto checkout reference (txid from /invoices/create). */
+    gatewayTxid: text('gateway_txid'),
+    /** Hosted checkout URL returned by the gateway. */
+    paymentUrl: text('payment_url'),
+    /** On-chain transaction hash from the confirmation webhook. */
+    txHash: text('tx_hash'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('payments_user_idx').on(t.userId),
+    uniqueIndex('payments_ref_idx').on(t.paymentRef),
+    index('payments_status_idx').on(t.status),
   ],
 );
 

@@ -51,6 +51,49 @@ export interface WalletSummary {
   totalCents: number;
 }
 
+/** GET /api/wallets — both wallets + pending holds. */
+export interface WalletBalances {
+  wallets: {
+    walletType: "COPINEX" | "WITHDRAWAL";
+    balanceCents: number;
+  }[];
+  pendingHoldsCents: number;
+}
+
+export interface LedgerEntryDto {
+  id: string;
+  walletType: "COPINEX" | "WITHDRAWAL";
+  type: string;
+  amountCents: number;
+  balanceAfterCents: number;
+  sourceType: string;
+  createdAt: string;
+}
+
+export interface PaymentDto {
+  id: string;
+  purpose: "ACTIVATION" | "DEPOSIT";
+  amountCents: number;
+  currency: string;
+  status: "PENDING" | "PAID" | "EXPIRED" | "FAILED";
+  paymentRef: string;
+  gatewayTxid: string | null;
+  paymentUrl: string | null;
+  txHash: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface WithdrawalRequestDto {
+  id: string;
+  walletType: "COPINEX" | "WITHDRAWAL";
+  amountCents: number;
+  status: "PENDING" | "PAID" | "REJECTED";
+  payoutTxid: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
 export interface UserDto {
   id: string;
   email: string;
@@ -250,4 +293,59 @@ export async function fetchAllConnections(): Promise<PammConnectionDto[]> {
     "/admin/pamm/connections",
   );
   return data.connections;
+}
+
+// ── Wallet & payments (transaction hub) ────────────────
+
+/** Both wallet balances + pending withdrawal holds. */
+export async function fetchWalletBalances(): Promise<WalletBalances> {
+  return request<WalletBalances>("/wallets");
+}
+
+/** Ledger history (both wallets), newest first. */
+export async function fetchLedger(): Promise<LedgerEntryDto[]> {
+  const data = await request<{ entries: LedgerEntryDto[] }>("/wallets/ledger");
+  return data.entries;
+}
+
+/** The member's payment history (activation fee + deposits). */
+export async function fetchMyPayments(): Promise<PaymentDto[]> {
+  const data = await request<{ payments: PaymentDto[] }>("/payments");
+  return data.payments;
+}
+
+/** Create the $50 ACTIVATION invoice → returns the checkout URL. */
+export async function createActivationPayment(): Promise<PaymentDto> {
+  const data = await request<{ payment: PaymentDto }>("/payments/activate", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return data.payment;
+}
+
+/** Create a DEPOSIT invoice → credits the COPINEX wallet on confirmation. */
+export async function createDepositPayment(amountCents: number): Promise<PaymentDto> {
+  const data = await request<{ payment: PaymentDto }>("/payments/deposit", {
+    method: "POST",
+    body: JSON.stringify({ amountCents }),
+  });
+  return data.payment;
+}
+
+/** Request a withdrawal: funds are held, admin approves or rejects. */
+export async function submitWithdrawal(
+  walletType: "COPINEX" | "WITHDRAWAL",
+  amountCents: number,
+): Promise<WithdrawalRequestDto> {
+  const data = await request<{ request: WithdrawalRequestDto }>("/wallets/withdraw", {
+    method: "POST",
+    body: JSON.stringify({ walletType, amountCents }),
+  });
+  return data.request;
+}
+
+/** The member's own withdrawal requests. */
+export async function fetchMyWithdrawals(): Promise<WithdrawalRequestDto[]> {
+  const data = await request<{ requests: WithdrawalRequestDto[] }>("/wallets/withdrawals");
+  return data.requests;
 }

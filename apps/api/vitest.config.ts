@@ -11,6 +11,7 @@ export default defineConfig({
       DATABASE_URL: TEST_DATABASE_URL,
       NODE_ENV: 'test',
       JWT_SECRET: 'test-secret-at-least-32-characters-long!!',
+      PAY2CRYPTO_WEBHOOK_SECRET: 'test-webhook-secret-0123456789',
       LOG_LEVEL: 'error',
     },
     // Shared test DB — serialize files to avoid truncation collisions.

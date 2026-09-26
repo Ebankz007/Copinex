@@ -65,3 +65,21 @@ export async function requireActivated(req: Request, _res: Response, next: NextF
     next(e);
   }
 }
+
+/** Inverse gate: only members who have NOT paid the $50 fee pass (one-time fee). */
+export async function requireUnactivated(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const [user] = await db
+      .select({ membershipActivated: schema.users.membershipActivated })
+      .from(schema.users)
+      .where(eq(schema.users.id, req.user!.id))
+      .limit(1);
+    if (user?.membershipActivated) {
+      next(new HttpError(409, 'ALREADY_ACTIVATED', 'Membership is already activated'));
+      return;
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}

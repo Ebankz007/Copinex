@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireActivated, requireAuth } from '../middleware/auth.js';
 import {
   getWalletBalances,
+  listMyLedger,
   listMyWithdrawals,
   requestWithdrawal,
 } from '../services/withdrawals.js';
@@ -42,6 +43,16 @@ walletsRouter.get('/withdrawals', async (req, res, next) => {
   try {
     const requests = await listMyWithdrawals(req.user!.id);
     res.json({ requests });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Ledger history (both wallets), newest first. */
+walletsRouter.get('/ledger', async (req, res, next) => {
+  try {
+    const entries = await listMyLedger(req.user!.id);
+    res.json({ entries });
   } catch (e) {
     next(e);
   }

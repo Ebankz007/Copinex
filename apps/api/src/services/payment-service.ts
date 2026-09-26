@@ -1,0 +1,163 @@
+import { desc, eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import * as schema from '@copinex/database';
+import { db } from '../db/drizzle.js';
+import { env } from '../config/env.js';
+import { HttpError } from '../lib/http-error.js';
+import { creditWallet, ensureWallets } from './wallets.js';
+import { applyActivation } from './members.js';
+
+/** The one-time membership activation fee (Active Member policy). */
+export const ACTIVATION_FEE_CENTS = 5000;
+
+const MAX_PAYMENT_CENTS = 100_000_000; // $1,000,000
+
+const PURPOSES = ['ACTIVATION', 'DEPOSIT'] as const;
+export type PaymentPurpose = (typeof PURPOSES)[number];
+
+function isMockMode(): boolean {
+  return !env.PAY2CRYPTO_API_URL || !env.PAY2CRYPTO_TOKEN;
+}
+
+/**
+ * Create a crypto payment invoice via Pay2Crypto (non-custodial, TRC20).
+ * Mock mode (no credentials configured) returns a synthetic checkout URL so
+ * the full flow is testable before the merchant token exists.
+ */
+export async function createPayment(userId: string, purpose: PaymentPurpose, amountCents?: number) {
+  const cents = purpose === 'ACTIVATION' ? ACTIVATION_FEE_CENTS : amountCents;
+  if (purpose === 'DEPOSIT' && (!Number.isInteger(cents) || (cents as number) <= 0 || (cents as number) > MAX_PAYMENT_CENTS)) {
+    throw new HttpError(400, 'INVALID_AMOUNT', 'Deposit amount must be a positive integer up to $1,000,000');
+  }
+
+  const paymentRef = `COP-${randomUUID()}`;
+  const amountUsd = (cents as number) / 100;
+
+  let gatewayTxid: string | null = null;
+  let paymentUrl: string;
+
+  if (isMockMode()) {
+    gatewayTxid = `mock-${randomUUID()}`;
+    paymentUrl = `https://checkout.pay2crypto.com/?txid=${gatewayTxid}&mock=1`;
+  } else {
+    const res = await fetch(`${env.PAY2CRYPTO_API_URL}/v1/invoices/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.PAY2CRYPTO_TOKEN}`,
+      },
+      body: JSON.stringify({
+        payment_ref: paymentRef,
+        payment_type: 1,
+        payment_network: 2, // Tron / TRC20
+        payment_amount: amountUsd,
+        order_id: paymentRef,
+        customer_id: userId,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new HttpError(
+        502,
+        'PAYMENT_GATEWAY_ERROR',
+        `Pay2Crypto invoice failed: ${res.status} ${body.slice(0, 200)}`,
+      );
+    }
+    const data = (await res.json()) as {
+      success?: boolean;
+      payment_url?: string;
+      txid?: string;
+    };
+    if (!data.success || !data.payment_url) {
+      throw new HttpError(502, 'PAYMENT_GATEWAY_ERROR', 'Pay2Crypto returned an invalid invoice response');
+    }
+    gatewayTxid = data.txid ?? null;
+    paymentUrl = data.payment_url;
+  }
+
+  const [payment] = await db
+    .insert(schema.payments)
+    .values({
+      userId,
+      purpose,
+      amountCents: cents as number,
+      paymentRef,
+      gatewayTxid,
+      paymentUrl,
+      status: 'PENDING',
+    })
+    .returning();
+  return payment;
+}
+
+/** The member's own payment history, newest first. */
+export async function listMyPayments(userId: string) {
+  return db
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.userId, userId))
+    .orderBy(desc(schema.payments.createdAt));
+}
+
+/**
+ * Pay2Crypto confirmation webhook. Idempotent: a PAID payment is a no-op.
+ * The exact payload shape is pinned during sandbox testing — extraction is
+ * deliberately defensive (payment_ref is the join key the gateway echoes).
+ */
+export async function handlePaymentWebhook(payload: unknown) {
+  const body = (payload ?? {}) as Record<string, unknown>;
+  const paymentRef = typeof body.payment_ref === 'string' ? body.payment_ref : undefined;
+  const txHash = typeof body.tx_hash === 'string' ? body.tx_hash : undefined;
+  const status = typeof body.status === 'string' ? body.status : undefined;
+
+  if (!paymentRef) throw new HttpError(400, 'INVALID_WEBHOOK', 'Missing payment_ref');
+
+  // Non-final statuses (broadcast, pending, etc.) are acknowledged, not applied.
+  if (status && !['confirmed', 'paid', 'success', 'PAID', 'completed'].includes(status.toLowerCase())) {
+    return { applied: false, reason: 'non-final status' };
+  }
+
+  const [payment] = await db
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.paymentRef, paymentRef))
+    .limit(1);
+  if (!payment) throw new HttpError(404, 'NOT_FOUND', 'Unknown payment_ref');
+
+  if (payment.status === 'PAID') return { applied: false, reason: 'already paid' };
+
+  // Amount verification when the gateway echoes it back.
+  if (typeof body.payment_amount === 'number') {
+    const expected = payment.amountCents / 100;
+    if (Math.abs(body.payment_amount - expected) > 0.01) {
+      throw new HttpError(400, 'AMOUNT_MISMATCH', `Payment amount ${body.payment_amount} != expected ${expected}`);
+    }
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.payments)
+      .set({ status: 'PAID', paidAt: now, txHash: txHash ?? null })
+      .where(eq(schema.payments.id, payment.id));
+
+    if (payment.purpose === 'ACTIVATION') {
+      // Same code path as the admin activation rail.
+      await applyActivation(tx, payment.userId, now);
+    } else {
+      await ensureWallets(tx, payment.userId);
+      await creditWallet(
+        tx,
+        payment.userId,
+        'COPINEX',
+        payment.amountCents,
+        'DEPOSIT',
+        'crypto_payment',
+        payment.id,
+        now,
+      );
+    }
+  });
+
+  return { applied: true, purpose: payment.purpose, userId: payment.userId };
+}

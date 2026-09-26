@@ -46,14 +46,14 @@ export default function DashboardPage() {
       {/* Deposit / Withdraw */}
       <section className="mt-4 grid grid-cols-2 gap-3">
         <Link
-          href="#"
+          href="/wallet?tab=deposit"
           className="flex items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-sm font-bold text-night transition hover:brightness-110 active:scale-[0.99]"
         >
           <PlusIcon className="h-4 w-4" />
           Deposit
         </Link>
         <Link
-          href="#"
+          href="/wallet?tab=withdraw"
           className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3.5 text-sm font-bold text-soft transition hover:bg-white/10 active:scale-[0.99]"
         >
           <ArrowUpRightIcon className="h-4 w-4" />

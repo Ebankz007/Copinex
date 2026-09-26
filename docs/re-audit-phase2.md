@@ -153,8 +153,9 @@ Full stack, 25 engine + 18 API tests, live E2E reconciled. `UPLINE_COMMISSION_SP
 ### Q4 — Payment provider: who collects the $50, and who pays out?
 **Spec:** TBD. **Built:** registration fee assumed PAID out-of-band; admin deposit endpoint is the interim rail; withdrawals exist (request/approve/reject) but no real payout rail.
 **The stakes:** this is the last true business blocker. The engine doesn't care (fee assumed paid) — but the product cannot collect a dollar without it.
-**Options:** Paystack or Flutterwave (both strong in the Nigerian/African market, card + transfer + payout rails) vs Stripe (global, simpler, pricier) vs manual/transfer for v1.
-**Recommendation:** **Paystack** (or Flutterwave) for collection + payouts, with the admin deposit rail remaining as the ops fallback. Henry's call on jurisdiction and fees — but the architecture is provider-agnostic (the fee is already assumed paid; adding a webhook is additive).
+**Decision (Henry, 2026-09-26):** **Pay2Crypto** — non-custodial crypto payment gateway (TRC20 USDT). Collection rail only: the client wallet page generates a checkout invoice for the $50 activation fee and for deposits; the confirmation webhook activates the membership or credits the COPINEX wallet. **No payout rail** (non-custodial): withdrawals remain manual USDT transfers by admin, with the on-chain `payoutTxid` recorded on approval.
+**Built (2026-09-26):** `payments` table + migration 0005; `POST /api/payments/activate` ($50, one pending at a time, unactivated only) and `POST /api/payments/deposit` (activated only, credits COPINEX on confirmation); `POST /api/webhooks/pay2crypto` (secret-gated, idempotent, ref/amount-verified); client `/wallet` page (balances, deposit/withdraw, payments + ledger activity, 5s poll while a payment is pending). Mock mode when `PAY2CRYPTO_TOKEN` is unset — the full flow is testable before the merchant token exists. Webhook payload shape to be pinned during Pay2Crypto sandbox testing; extraction is deliberately defensive.
+**Remaining:** Henry to create the Pay2Crypto account + scoped token (`app.pay2crypto.com`), then set `PAY2CRYPTO_API_URL`/`PAY2CRYPTO_TOKEN`/`PAY2CRYPTO_WEBHOOK_SECRET` and sandbox the live webhook.
 
 ---
 
@@ -174,7 +175,7 @@ This is the natural Phase 4 work and the single biggest unknown between "the pla
 
 **P0 (go-live blockers):**
 1. ~~Q1 Active Member policy~~ — **RESOLVED (2026-09-26):** Active = $50 fee paid; `membership_activated` gate + admin rail shipped, tested, documented above.
-2. Q4 Payment provider — no money can be collected.
+2. ~~Q4 Payment provider~~ — **RESOLVED (2026-09-26):** Pay2Crypto crypto rail shipped (invoices, webhook, wallet page, mock mode); live token + sandbox webhook pinning pending Henry's merchant account.
 3. Settlement profit feed (PAMM/broker data source for §7).
 4. Security: admin 2FA, email verification/password reset, security headers.
 
@@ -193,4 +194,4 @@ This is the natural Phase 4 work and the single biggest unknown between "the pla
 
 **The compensation product the spec describes is now built and tested.** §2–§12 are implemented engine-first with spec test cases, DB-level integrity, and a CI-gated suite (145 tests, green). Phase 1 security basics (rate limits, JWT fail-fast) and Phase 7 (CI, backups) landed. Score: **~6/10 — "compensation core complete; operations layer missing."**
 
-**What it still is not:** launchable. Three gates stand between here and go-live — the payment provider (Q4), the settlement profit feed, and the security hardening (2FA/verify/headers). None of them require redesign; all of them are completion work on a sound architecture.
+**What it still is not:** launchable. Two gates stand between here and go-live — the settlement profit feed and the security hardening (2FA/verify/headers). The payment rail (Q4) is built and mock-tested; only the live Pay2Crypto credentials and a sandbox webhook pinning remain. None of the remaining gates require redesign; all of them are completion work on a sound architecture.

@@ -73,6 +73,24 @@ export async function listMyWithdrawals(userId: string) {
     .orderBy(desc(schema.withdrawalRequests.createdAt));
 }
 
+/** Ledger history (both wallets), newest first — the wallet page's transaction hub. */
+export async function listMyLedger(userId: string, limit = 100) {
+  return db
+    .select({
+      id: schema.ledgerEntries.id,
+      walletType: schema.ledgerEntries.walletType,
+      type: schema.ledgerEntries.type,
+      amountCents: schema.ledgerEntries.amountCents,
+      balanceAfterCents: schema.ledgerEntries.balanceAfterCents,
+      sourceType: schema.ledgerEntries.sourceType,
+      createdAt: schema.ledgerEntries.createdAt,
+    })
+    .from(schema.ledgerEntries)
+    .where(eq(schema.ledgerEntries.userId, userId))
+    .orderBy(desc(schema.ledgerEntries.createdAt))
+    .limit(limit);
+}
+
 /** Both wallet balances + the total held in pending withdrawals. */
 export async function getWalletBalances(userId: string) {
   await ensureWallets(db, userId);
@@ -145,8 +163,11 @@ export async function listWithdrawals(status?: string) {
     .orderBy(desc(schema.withdrawalRequests.createdAt));
 }
 
-/** Approve a PENDING withdrawal: funds already left the wallet — this marks the manual payout done. */
-export async function approveWithdrawal(requestId: string, adminId: string) {
+/**
+ * Approve a PENDING withdrawal: funds already left the wallet — this marks the
+ * manual USDT (TRC20) payout done. `payoutTxid` records the on-chain transfer.
+ */
+export async function approveWithdrawal(requestId: string, adminId: string, payoutTxid?: string) {
   const [request] = await db
     .select()
     .from(schema.withdrawalRequests)
@@ -159,7 +180,7 @@ export async function approveWithdrawal(requestId: string, adminId: string) {
 
   const [updated] = await db
     .update(schema.withdrawalRequests)
-    .set({ status: 'PAID', adminId, reviewedAt: new Date() })
+    .set({ status: 'PAID', adminId, reviewedAt: new Date(), payoutTxid: payoutTxid ?? null })
     .where(eq(schema.withdrawalRequests.id, requestId))
     .returning();
   return updated;
