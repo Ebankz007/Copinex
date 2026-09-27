@@ -8,17 +8,18 @@ import { ApiError, login, register } from "@/lib/api";
 type Mode = "login" | "register";
 
 /**
- * Shared login/register form. Stores the token (localStorage) and routes to
- * the dashboard on success.
+ * Shared login/register form (light marketing design). Stores the token and
+ * routes to the member dashboard on success. Register accepts a sponsor ID
+ * prefilled from the ?sponsor= query parameter.
  */
-export function AuthForm({ mode }: { mode: Mode }) {
+export function AuthForm({ mode, sponsorId: initialSponsor }: { mode: Mode; sponsorId?: string }) {
   const router = useRouter();
   const isLogin = mode === "login";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [sponsorId, setSponsorId] = useState("");
+  const [sponsorId, setSponsorId] = useState(initialSponsor ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +38,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           sponsorId: sponsorId.trim() || undefined,
         });
       }
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
@@ -46,32 +47,24 @@ export function AuthForm({ mode }: { mode: Mode }) {
     }
   }
 
-  const inputClass =
-    "w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-soft placeholder:text-mist/60 outline-none transition focus:border-green/50 focus:bg-white/[0.07]";
-
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="auth-stack">
       {!isLogin && (
-        <div>
-          <label htmlFor="fullName" className="mb-1.5 block text-xs font-semibold text-mist">
-            Full name <span className="font-normal text-mist/60">(optional)</span>
-          </label>
+        <div className="auth-field">
+          <label htmlFor="fullName">Full name <span style={{ fontWeight: 500, color: "var(--muted)" }}>(optional)</span></label>
           <input
             id="fullName"
             type="text"
             autoComplete="name"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className={inputClass}
             placeholder="Jane Doe"
           />
         </div>
       )}
 
-      <div>
-        <label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-mist">
-          Email
-        </label>
+      <div className="auth-field">
+        <label htmlFor="email">Email</label>
         <input
           id="email"
           type="email"
@@ -79,15 +72,22 @@ export function AuthForm({ mode }: { mode: Mode }) {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={inputClass}
           placeholder="you@example.com"
         />
       </div>
 
-      <div>
-        <label htmlFor="password" className="mb-1.5 block text-xs font-semibold text-mist">
-          Password
-        </label>
+      <div className="auth-field">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <label htmlFor="password">Password</label>
+          {isLogin && (
+            <Link
+              href="/forgot-password"
+              style={{ fontSize: 12, fontWeight: 800, color: "var(--blue-600)" }}
+            >
+              Forgot password?
+            </Link>
+          )}
+        </div>
         <input
           id="password"
           type="password"
@@ -96,53 +96,41 @@ export function AuthForm({ mode }: { mode: Mode }) {
           autoComplete={isLogin ? "current-password" : "new-password"}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={inputClass}
           placeholder="At least 8 characters"
         />
       </div>
 
       {!isLogin && (
-        <div>
-          <label htmlFor="sponsorId" className="mb-1.5 block text-xs font-semibold text-mist">
-            Sponsor ID <span className="font-normal text-mist/60">(optional)</span>
-          </label>
+        <div className="auth-field">
+          <label htmlFor="sponsorId">Sponsor ID <span style={{ fontWeight: 500, color: "var(--muted)" }}>(optional)</span></label>
           <input
             id="sponsorId"
             type="text"
             value={sponsorId}
             onChange={(e) => setSponsorId(e.target.value)}
-            className={inputClass}
             placeholder="Paste your sponsor's ID"
           />
         </div>
       )}
 
-      {error && (
-        <p className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-2.5 text-xs text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="auth-error">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded-2xl bg-green py-3.5 text-sm font-bold text-night transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
-      >
+      <button type="submit" disabled={busy} className="auth-submit">
         {busy ? "Please wait…" : isLogin ? "Sign in" : "Create account"}
       </button>
 
-      <p className="text-center text-xs text-mist">
+      <p className="auth-foot">
         {isLogin ? (
           <>
             No account yet?{" "}
-            <Link href="/register" className="font-bold text-green">
+            <Link href="/register">
               Register
             </Link>
           </>
         ) : (
           <>
             Already registered?{" "}
-            <Link href="/login" className="font-bold text-green">
+            <Link href="/login">
               Sign in
             </Link>
           </>

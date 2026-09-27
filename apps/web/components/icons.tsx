@@ -191,3 +191,21 @@ export function HomeIcon(props: IconProps) {
     </Base>
   );
 }
+
+export function BellIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
+      <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+    </Base>
+  );
+}
+
+export function UserIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="8" r="4" />
+    </Base>
+  );
+}

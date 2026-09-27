@@ -39,6 +39,17 @@ $WEB_HEALTH = "http://localhost:$WEB_PORT/api/health"
 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
+# Resolve the Node executable to an absolute path. When this script runs as
+# SYSTEM (headless, nobody logged in) the process PATH is minimal and a bare
+# 'node' may not resolve, which would make Start-Process fail with the services
+# silently down. Resolve once, here, and fail loudly if it is truly missing.
+$nodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source
+if (-not $nodeExe) { $nodeExe = 'C:\Program Files\nodejs\node.exe' }
+if (-not (Test-Path $nodeExe)) {
+  Write-Error "Node executable not found at '$nodeExe'. Install Node or set the path in this script."
+  exit 1
+}
+
 function Rotate-Log([string]$Path) {
   if (Test-Path "$Path.2") { Remove-Item "$Path.2" -Force }
   if (Test-Path "$Path.1") { Move-Item "$Path.1" "$Path.2" -Force }
@@ -110,9 +121,9 @@ function Stop-One {
 
 switch ($Command) {
   'start' {
-    Start-One -Name 'API' -Cwd $apiDir -Exe 'node' -ProcArgs @('dist/index.js') `
+    Start-One -Name 'API' -Cwd $apiDir -Exe $nodeExe -ProcArgs @('dist/index.js') `
       -PidFile $apiPidFile -LogFile $apiLog -Port $API_PORT -HealthUrl $API_HEALTH
-    Start-One -Name 'WEB' -Cwd $webDir -Exe 'node' -ProcArgs @('node_modules/next/dist/bin/next', 'start', '-p', "$WEB_PORT") `
+    Start-One -Name 'WEB' -Cwd $webDir -Exe $nodeExe -ProcArgs @('node_modules/next/dist/bin/next', 'start', '-p', "$WEB_PORT") `
       -PidFile $webPidFile -LogFile $webLog -Port $WEB_PORT -HealthUrl $WEB_HEALTH
   }
   'stop' {

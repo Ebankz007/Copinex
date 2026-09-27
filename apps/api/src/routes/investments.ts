@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireActivated, requireAuth } from '../middleware/auth.js';
+import { isAdminRole } from '../lib/roles.js';
 import {
   createInvestment,
   getInvestmentDetail,
@@ -61,7 +62,7 @@ investmentsRouter.post('/', requireActivated, async (req, res, next) => {
 /** Investment detail (owner or admin). */
 investmentsRouter.get('/:id', async (req, res, next) => {
   try {
-    const isAdmin = req.user!.role === 'ADMIN';
+    const isAdmin = isAdminRole(req.user!.role);
     const detail = await getInvestmentDetail(req.user!.id, req.params.id, isAdmin);
     res.json(detail);
   } catch (e) {

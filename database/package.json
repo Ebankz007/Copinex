@@ -17,7 +17,8 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "studio": "drizzle-kit studio",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "seed-users": "tsx src/seed-users.ts"
   },
   "dependencies": {
     "@copinex/engine": "workspace:*",

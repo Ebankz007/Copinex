@@ -1,27 +1,53 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, ilike, or } from 'drizzle-orm';
 import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
 import { HttpError } from '../lib/http-error.js';
 import type { DbOrTx } from '../db/drizzle.js';
 
-/** Members list with activation state (admin ops rail). */
-export async function listMembers(activated?: boolean) {
-  const where =
-    activated === undefined
-      ? undefined
-      : eq(schema.users.membershipActivated, activated);
+/**
+ * The single column set every member-list surface returns (admin console,
+ * search, filters). Kept here so the shapes cannot drift apart again.
+ */
+export const memberColumns = {
+  id: schema.users.id,
+  email: schema.users.email,
+  fullName: schema.users.fullName,
+  role: schema.users.role,
+  status: schema.users.status,
+  isActive: schema.users.isActive,
+  membershipActivated: schema.users.membershipActivated,
+  activatedAt: schema.users.activatedAt,
+  emailVerifiedAt: schema.users.emailVerifiedAt,
+  lastActivityAt: schema.users.lastActivityAt,
+  createdAt: schema.users.createdAt,
+};
+
+/**
+ * Members list for the admin ops rail.
+ * `search` matches email or full name (case-insensitive, %substring%).
+ * Results are capped so a broad query cannot pull the whole table.
+ */
+export async function listMembers(
+  activated?: boolean,
+  search?: string,
+  limit = 100,
+) {
+  const conditions = [
+    activated === undefined ? undefined : eq(schema.users.membershipActivated, activated),
+    search
+      ? or(
+          ilike(schema.users.email, `%${search}%`),
+          ilike(schema.users.fullName, `%${search}%`),
+        )
+      : undefined,
+  ].filter((c) => c !== undefined);
+
   return db
-    .select({
-      id: schema.users.id,
-      email: schema.users.email,
-      fullName: schema.users.fullName,
-      membershipActivated: schema.users.membershipActivated,
-      activatedAt: schema.users.activatedAt,
-      createdAt: schema.users.createdAt,
-    })
+    .select(memberColumns)
     .from(schema.users)
-    .where(where)
-    .orderBy(schema.users.createdAt);
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(schema.users.createdAt)
+    .limit(limit);
 }
 
 /**

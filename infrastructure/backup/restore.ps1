@@ -29,8 +29,20 @@ $pgRestore = Join-Path $pgBin "pg_restore.exe"
 if (-not (Test-Path $pgRestore)) { throw "pg_restore not found at $pgRestore" }
 
 if (-not $env:PGPASSWORD) {
-  if (-not $DbPassword) { throw "No password: set `$env:PGPASSWORD or pass -DbPassword" }
-  $env:PGPASSWORD = $DbPassword
+  if ($DbPassword) {
+    $env:PGPASSWORD = $DbPassword
+  } else {
+    # Same convention as backup.ps1 / pre-pilot-cleanup.ps1: read DATABASE_URL
+    # from platform/.env so the documented restore command works as written.
+    $envFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) ".env"
+    if (Test-Path $envFile) {
+      $line = (Get-Content $envFile | Where-Object { $_ -match "^DATABASE_URL=" } | Select-Object -First 1)
+      if ($line) { $env:PGPASSWORD = [regex]::Match($line, "://[^:]+:([^@]+)@").Groups[1].Value }
+    }
+  }
+  if (-not $env:PGPASSWORD) {
+    throw "No password: set `$env:PGPASSWORD, pass -DbPassword, or add DATABASE_URL to platform/.env"
+  }
 }
 
 Write-Host "Restoring $BackupFile -> $DbName@$DbHost`:$DbPort"

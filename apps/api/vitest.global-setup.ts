@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
@@ -21,7 +22,12 @@ export default async function globalSetup() {
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const migrationsFolder = path.resolve(here, '../../database/migrations');
-  const root = path.resolve(here, '../../..');
+  // `here` is <root>/apps/api, so the workspace root is two levels up. Derive it
+  // by walking up to pnpm-workspace.yaml instead of counting levels: a wrong
+  // count only fails when pnpm happens to resolve --filter from an inherited
+  // env var, which made this pass under `pnpm -r test` and fail under a direct
+  // vitest invocation.
+  const root = findWorkspaceRoot(here);
 
   const pool = new Pool({ connectionString: TEST_DATABASE_URL });
   const db = drizzle(pool);
@@ -33,6 +39,18 @@ export default async function globalSetup() {
     env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
     stdio: 'pipe',
   });
+}
+
+/** Walk up from `start` until the pnpm workspace manifest is found. */
+function findWorkspaceRoot(start: string): string {
+  let dir = start;
+  for (let i = 0; i < 6; i++) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(`Could not locate pnpm-workspace.yaml above ${start}`);
 }
 
 /** Create the test database if missing (connect via the `postgres` maintenance DB). */

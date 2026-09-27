@@ -4,11 +4,14 @@ import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
 import { verifyAuthToken } from '../lib/jwt.js';
 import { HttpError } from '../lib/http-error.js';
+import { isTokenSessionValid, touchSession } from '../services/sessions.js';
+import { roleHasPermission } from '../services/permissions.js';
+import { isAdminRole, type UserRole } from '../lib/roles.js';
 
 export interface AuthUser {
   id: string;
   email: string;
-  role: 'MEMBER' | 'ADMIN';
+  role: UserRole;
 }
 
 declare global {
@@ -20,15 +23,24 @@ declare global {
   }
 }
 
-export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
+export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     next(new HttpError(401, 'UNAUTHORIZED', 'Missing bearer token'));
     return;
   }
+  const token = header.slice('Bearer '.length);
   try {
-    const payload = verifyAuthToken(header.slice('Bearer '.length));
+    const payload = verifyAuthToken(token);
+    // Logout revocation: a revoked session kills the token immediately.
+    // Tokens without a session row (legacy/tooling) remain valid.
+    if (!(await isTokenSessionValid(token))) {
+      next(new HttpError(401, 'UNAUTHORIZED', 'Session revoked — please log in again'));
+      return;
+    }
     req.user = { id: payload.sub, email: payload.email, role: payload.role };
+    // Fire-and-forget activity touch — never blocks the request.
+    void touchSession(token);
     next();
   } catch {
     next(new HttpError(401, 'UNAUTHORIZED', 'Invalid or expired token'));
@@ -36,11 +48,29 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
 }
 
 export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
-  if (req.user?.role !== 'ADMIN') {
+  if (!isAdminRole(req.user?.role)) {
     next(new HttpError(403, 'FORBIDDEN', 'Admin role required'));
     return;
   }
   next();
+}
+
+/**
+ * Permission gate — checks the role_permissions catalog (seeded: ADMIN holds
+ * every permission). Use on admin routes that need a specific capability.
+ */
+export function requirePermission(code: string) {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user || !(await roleHasPermission(req.user.role, code))) {
+        next(new HttpError(403, 'FORBIDDEN', `Permission required: ${code}`));
+        return;
+      }
+      next();
+    } catch (e) {
+      next(e);
+    }
+  };
 }
 
 /**

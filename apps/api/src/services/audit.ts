@@ -26,7 +26,15 @@ export type AdminAuditAction =
   | 'LEADERSHIP_FULFILL'
   | 'BROKER_CREATE'
   | 'BROKER_DEACTIVATE'
-  | 'MEMBER_ACTIVATE';
+  | 'MEMBER_ACTIVATE'
+  | 'MEMBER_UPDATE'
+  /** Granting, changing or revoking a role — SUPERADMIN-only (see lib/roles.ts). */
+  | 'MEMBER_ROLE_CHANGE'
+  | 'ANNOUNCEMENT_CREATE'
+  | 'ANNOUNCEMENT_UPDATE'
+  | 'ANNOUNCEMENT_DELETE'
+  | 'SETTING_UPDATE'
+  | 'SETTING_DELETE';
 
 export interface AuditEntry {
   adminId: string;

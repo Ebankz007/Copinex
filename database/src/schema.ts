@@ -25,7 +25,13 @@ import {
 
 export const userStatusEnum = pgEnum('user_status', ['ACTIVE', 'INACTIVE', 'SUSPENDED']);
 
-export const userRoleEnum = pgEnum('user_role', ['MEMBER', 'ADMIN']);
+/**
+ * Role hierarchy: SUPERADMIN > ADMIN > MEMBER.
+ * SUPERADMIN (migration 0009) exists solely to gate staff authority — who may
+ * grant or revoke ADMIN/SUPERADMIN. Every other capability is identical to
+ * ADMIN. See apps/api/src/lib/roles.ts.
+ */
+export const userRoleEnum = pgEnum('user_role', ['MEMBER', 'ADMIN', 'SUPERADMIN']);
 
 export const bonusTypeEnum = pgEnum('bonus_type', [
   'DIRECT_REFERRAL_BONUS',
@@ -88,6 +94,8 @@ export const users = pgTable(
     /** Active Member policy (§9.1, answered 2026-09-26): Active = paid the $50 activation fee. */
     membershipActivated: boolean('membership_activated').notNull().default(false),
     activatedAt: timestamp('activated_at', { withTimezone: true }),
+    /** Set when the member confirms their email via the verification token. */
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
     highestAssociateRank: integer('highest_associate_rank').notNull().default(0),
     highestLeadershipRank: integer('highest_leadership_rank').notNull().default(0),
@@ -538,4 +546,131 @@ export const adminAuditLog = pgTable(
     index('admin_audit_created_idx').on(t.createdAt),
     index('admin_audit_target_idx').on(t.targetType, t.targetId),
   ],
+);
+
+// ── Platform services (2026-09-27) ─────────────────────
+
+export const emailTokenPurposeEnum = pgEnum('email_token_purpose', [
+  'VERIFY_EMAIL',
+  'RESET_PASSWORD',
+]);
+
+/**
+ * Login sessions. The JWT itself is stateless; this table gives admins and
+ * members visibility + revocation. A session is active while revokedAt IS NULL.
+ * tokenHash is the sha256 of the raw JWT — never store the token itself.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** sha256 hex of the raw auth token (JWT). Enables lookup + revocation. */
+    tokenHash: text('token_hash').notNull(),
+    ip: text('ip').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('sessions_token_hash_idx').on(t.tokenHash),
+    index('sessions_user_idx').on(t.userId),
+  ],
+);
+
+/**
+ * In-app notifications (system announcements, wallet events, admin notices).
+ * readAt NULL = unread.
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    type: text('type').notNull(), // 'SYSTEM' | 'WALLET' | 'INVESTMENT' | 'ANNOUNCEMENT' | ...
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    link: text('link'),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('notifications_user_created_idx').on(t.userId, t.createdAt),
+    index('notifications_unread_idx').on(t.userId, t.readAt),
+  ],
+);
+
+/**
+ * Platform announcements — the admin content-management rail. PUBLISHED
+ * announcements are surfaced to members as notifications.
+ */
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    status: text('status').notNull().default('DRAFT'), // DRAFT | PUBLISHED
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('announcements_status_idx').on(t.status)],
+);
+
+/**
+ * One-time email tokens (email verification, password reset).
+ * tokenHash is the sha256 of the raw token — the raw value is only ever sent
+ * to the member's inbox and never stored. Single-use via usedAt.
+ */
+export const emailTokens = pgTable(
+  'email_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    purpose: emailTokenPurposeEnum('purpose').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('email_tokens_hash_idx').on(t.tokenHash),
+    index('email_tokens_user_purpose_idx').on(t.userId, t.purpose),
+  ],
+);
+
+/** Granular permission catalog (e.g. 'members.manage', 'content.publish'). */
+export const permissions = pgTable(
+  'permissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code').notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('permissions_code_idx').on(t.code)],
+);
+
+/** Role → permission grants. ADMIN starts with every permission (seeded). */
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    role: userRoleEnum('role').notNull(),
+    permissionId: uuid('permission_id')
+      .notNull()
+      .references(() => permissions.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('role_permissions_role_code_idx').on(t.role, t.permissionId)],
 );

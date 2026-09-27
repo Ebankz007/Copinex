@@ -9,12 +9,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Copinex — Member Portal",
-  description: "Copy. Trade. Grow.",
+  title: "Copinex — AI-Assisted Copy Trading with Control",
+  description:
+    "Copinex combines AI-assisted market analysis, professional trader oversight, and disciplined risk controls to connect your personal broker account to a managed copy-trading strategy.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#010b1a",
+  themeColor: "#071c36",
   width: "device-width",
   initialScale: 1,
 };
@@ -24,10 +25,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-screen font-sans text-soft antialiased">
-        <div className="app-glow pointer-events-none fixed inset-0" aria-hidden="true" />
-        <div className="relative">{children}</div>
-      </body>
+      <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>
   );
 }

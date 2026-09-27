@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { fetchMe, logout, type UserDto } from "@/lib/api";
+import { fetchMe, isAdminRole, logout, type UserDto } from "@/lib/api";
 
 function initials(name: string | null, email: string): string {
   if (name) {
@@ -35,8 +35,8 @@ export function DashboardHeader() {
     };
   }, []);
 
-  function onSignOut() {
-    logout();
+  async function onSignOut() {
+    await logout();
     setUser(null);
     router.refresh();
   }
@@ -54,9 +54,15 @@ export function DashboardHeader() {
           <span className="mt-1.5 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] font-medium text-mist">
             ID: {displayId}
           </span>
-          {user?.role === "ADMIN" && (
-            <span className="ml-1.5 inline-flex items-center rounded-full border border-green/30 bg-green/10 px-2.5 py-0.5 text-[11px] font-bold text-green">
-              ADMIN
+          {user && isAdminRole(user.role) && (
+            <span
+              className={`ml-1.5 inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                user.role === "SUPERADMIN"
+                  ? "border border-amber-300/40 bg-amber-300/10 text-amber-200"
+                  : "border border-green/30 bg-green/10 text-green"
+              }`}
+            >
+              {user.role}
             </span>
           )}
         </div>
@@ -74,7 +80,7 @@ export function DashboardHeader() {
           )}
           {loaded && user && (
             <button
-              onClick={onSignOut}
+              onClick={() => void onSignOut()}
               className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-mist transition hover:bg-white/10 hover:text-soft"
             >
               Sign out

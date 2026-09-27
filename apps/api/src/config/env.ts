@@ -20,6 +20,13 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
   LOG_LEVEL: z.string().default('info'),
+  // Public base URL used to build email links (verification, password reset).
+  APP_URL: z.string().url().default('http://localhost:3000'),
+  // Outbound email. Unset = dev transport: emails are logged to the console
+  // and (development only) the API response carries the link so the full flow
+  // is testable without a mail server. Set SMTP_URL for real delivery.
+  SMTP_URL: z.string().optional(),
+  EMAIL_FROM: z.string().email().default('no-reply@copinex.com'),
   // Pay2Crypto crypto payment rail (non-custodial, TRC20). Unset = mock mode:
   // createPayment returns a synthetic checkout URL and webhooks are simulated
   // in tests. Set all three for live operation.
