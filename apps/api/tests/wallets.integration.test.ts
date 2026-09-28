@@ -2,11 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function resetDb() {
   await pool.query(`
@@ -34,11 +35,11 @@ async function makeAdmin(userId: string) {
   await pool.query(`UPDATE users SET role = 'ADMIN' WHERE id = $1`, [userId]);
 }
 
-async function login(email: string): Promise<{ token: string; user: { id: string } }> {
-  const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body;
-}
+  async function login(email: string): Promise<{ token: string; user: { id: string } }> {
+    const { token } = await loginWithEnrollment(app, email);
+    const me = await request(app).get('/api/auth/me').set(auth(token));
+    return { token, user: me.body.user };
+  }
 
 async function fundWallet(userId: string, walletType: string, amountCents: number) {
   await pool.query(
@@ -60,7 +61,7 @@ async function activate(userId: string) {
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(async () => {
   await resetDb();
@@ -164,7 +165,7 @@ describe('withdrawal flow', () => {
     expect(req.body.request.status).toBe('PENDING');
     const requestId = req.body.request.id as string;
 
-    // Funds are held: balance 10000 → 5000, ledger shows -5000 WITHDRAWAL.
+    // Funds are held: balance 10000 â†’ 5000, ledger shows -5000 WITHDRAWAL.
     const wallet = await pool.query('SELECT balance_cents FROM wallets WHERE user_id = $1 AND wallet_type = $2', [
       member.user.id,
       'WITHDRAWAL',

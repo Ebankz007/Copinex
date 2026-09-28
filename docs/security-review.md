@@ -51,12 +51,15 @@ logins return a 5-minute challenge instead of a session; the challenge
 exchanges for a session with a live code or an unused backup code (burned on
 use). Secrets are AES-256-GCM encrypted at rest under a key derived from
 `JWT_SECRET` — a database read alone never yields a working second factor —
-and challenges carry `purpose: '2fa'`, which `requireAuth` rejects, so a
-challenge can never pass as a bearer token. Residual gaps, stated plainly:
-2FA is opt-in rather than enforced on staff; there is no per-account attempt
-counter on the verify endpoint beyond the shared auth rate limiter; and
-rotating `JWT_SECRET` invalidates every enrolled secret (re-enrolment
-required — no rotation runbook exists yet).
+and challenges carry a `purpose`, which `requireAuth` rejects, so a challenge
+can never pass as a bearer token. **Enforced on staff since 2026-09-28:**
+ADMIN/SUPERADMIN without an enrolled factor get no session — only a
+15-minute enrolment challenge opening the setup/enable endpoints, with the
+first session minted on proving possession. Residual gaps, stated plainly:
+there is no per-account attempt counter on the verify endpoint beyond the
+shared auth rate limiter (shipped separately below); and rotating
+`JWT_SECRET` invalidates every enrolled secret (re-enrolment required — no
+rotation runbook exists yet).
 
 **Email tokens are single-use, hashed at rest, and time-boxed.** Only
 `sha256(token)` is stored; the plaintext exists solely inside the email link.
@@ -116,21 +119,30 @@ claim in `DEPLOYMENT.md` that the token is "mitigated by CSP" is overstated.
 Fix, in order of value: move to an **httpOnly, SameSite=Strict cookie** with
 CSRF protection (removes the token from JS entirely), then add **nonce-based
 CSP** so `unsafe-inline` can be dropped from `script-src`.
+**Shipped 2026-09-28:** the session now lives in an httpOnly,
+SameSite=Strict cookie (bearer kept for tests/tooling); JavaScript holds only
+a worthless presence flag. CSRF posture is Strict + same-origin proxy + no
+mutating GETs. Nonce CSP remains open.
 
 **b. No second factor on the admin console.** A single password protects
 `/admin/*` — member search, manual USDT approvals, pool settlement recording,
 settings. This is the highest-value target on the platform. ~~At minimum, TOTP
 2FA on ADMIN accounts, enforced server-side, with recovery codes.~~
 **Shipped 2026-09-28** (migration `0010`): opt-in TOTP for every account with
-encrypted secrets and single-use backup codes — but enrolment is still the
-member's choice. The remaining step is *enforcing* it on staff accounts
-(SUPERADMIN first) before real money.
+encrypted secrets and single-use backup codes — **and enforced on staff the
+same day**: unenrolled ADMIN/SUPERADMIN get no session, only a 15-minute
+enrolment challenge opening the setup/enable endpoints.
 
 **c. No account lockout or credential-stuffing defence.** The auth limiter is
 20 requests / 15 min per IP, which is a speed bump against one IP and nothing
 against a botnet. There is no per-account failure counter, no lockout, and no
 progressive delay. Recommendation: track failed logins per account, back off
 exponentially, and alert on a spike.
+**Shipped 2026-09-28** (migration `0011`): five consecutive failed passwords
+or second-factor codes lock the account on a 5/10/20/40/60-min capped
+backoff (423 with a retry time); any success resets. Residual: a knowing
+attacker can still lock a victim out for up to an hour (the standard price
+of lockout), and there is no spike alerting yet.
 
 **d. `trust proxy` is not set.** Behind a reverse proxy, `req.ip` resolves to
 the proxy, which means (i) every member shares one rate-limit bucket, and
@@ -138,6 +150,9 @@ the proxy, which means (i) every member shares one rate-limit bucket, and
 `app.set('trust proxy', 1)` when TLS terminates upstream — this is already on
 the pre-launch checklist in `DEPLOYMENT.md`, and it is a genuine blocker, not
 a nicety.
+**Shipped 2026-09-28:** `TRUST_PROXY` env (default off — a directly-exposed
+API must not honour client-supplied `X-Forwarded-For`); set `TRUST_PROXY=1`
+in production per `.env.production.example`.
 
 ### Medium
 
@@ -153,6 +168,8 @@ duration, so a cost increase wants `scryptAsync`.
 **g. The JWT algorithm is not pinned.** `jwt.verify` is called without an
 `algorithms` allow-list. With a symmetric secret the practical risk is low, but
 pinning `algorithms: ['HS256']` removes the question entirely.
+**Shipped 2026-09-28:** HS256 pinned on every sign and verify path (session,
+2FA challenge, enrolment challenge).
 
 **h. JWTs cannot be revoked before logout.** Logout works; a stolen token used
 before its owner logs out works. Session revocation narrows the window but does
@@ -228,9 +245,13 @@ running process.
 
 ## 5. Launch gate
 
-Do not take real member funds until: (a) 2FA *enforced* on staff accounts
-(opt-in TOTP shipped 2026-09-28; enforcement is the remaining step), (b) httpOnly cookie auth
-or at minimum nonce CSP, (c) `trust proxy` configured behind the real proxy,
+Do not take real member funds until: (a) ~~2FA *enforced* on staff accounts
+(opt-in TOTP shipped 2026-09-28; enforcement is the remaining step)~~ **2FA
+enforced on staff (shipped 2026-09-28)** — remaining auth work is nonce CSP
+and spike alerting, (b) ~~httpOnly cookie auth
+or at minimum nonce CSP~~ **nonce CSP (httpOnly cookies shipped
+2026-09-28)**, (c) ~~`trust proxy` configured behind the real proxy~~
+**`TRUST_PROXY=1` set behind the real proxy (wiring shipped 2026-09-28)**,
 (d) SMTP + SPF/DKIM verified end to end, (e) Pay2Crypto merchant token live,
 (f) placeholder broker links replaced, (g) an external pen test done,
 (h) the two tainted dev accounts resolved and the headless tasks running as

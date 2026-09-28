@@ -13,15 +13,26 @@ use `error: "VALIDATION_ERROR"` plus a `details` object of field errors.
 
 ## Authentication
 
-Two mechanisms, used together:
+Two credentials, two transports:
 
-- **Bearer JWT** — `Authorization: Bearer <token>`, 7-day expiry, carries `sub`,
-  `email`, `role`, `jti`.
+- **Session token (JWT)** — carries `sub`, `email`, `role`, `jti`; 7-day
+  expiry; HS256 pinned on sign and verify. Browsers carry it in the
+  `copinex_token` **httpOnly, SameSite=Strict** cookie (set on register,
+  login, 2FA verify, and 2FA-enrolment enable; dropped on logout).
+  Non-browser clients (tests, tooling) send it as
+  `Authorization: Bearer <token>` instead — `requireAuth` accepts either,
+  bearer first. A readable `copinex_authed=1` flag cookie tells the web UI
+  whether to render demo or member mode; it confers nothing.
 - **Server-side session row** — every issued token has a `sessions` row storing
   `sha256(token)`. `requireAuth` rejects a token whose session is revoked, so
   logout and "revoke this device" are immediate rather than "in 7 days".
 
 Token without a session row is still accepted (legacy/tooling compatibility).
+
+**Lockout.** Five consecutive failed passwords (or second-factor codes) lock
+the account — 423 `ACCOUNT_LOCKED` with a retry time — on a 5/10/20/40/60-min
+capped backoff. Any success resets the counter. Unknown addresses stay a
+plain 401 (nothing to count against).
 
 ### Roles
 
@@ -42,7 +53,7 @@ expiry.
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | POST | `/api/auth/register` | – | `{ email, password, fullName?, sponsorId? }` → `201 { token, user, verification }`. `verification.link` is echoed **only** by the dev mail transport. `sponsorId` must be a real user UUID or the request 400s. |
-| POST | `/api/auth/login` | – | `{ email, password }` → `{ token, user }`, **or** `{ requiresTwoFactor: true, challenge }` when the account has 2FA (the challenge is a 5-minute non-session token — it 401s on every `requireAuth` route). |
+| POST | `/api/auth/login` | – | `{ email, password }` → `{ token, user }`, **or** `{ requiresTwoFactor: true, challenge }` (enrolled account — 5-minute non-session token, 401s on every `requireAuth` route), **or** `{ requiresEnrollment: true, challenge }` (unenrolled STAFF — 15-minute token opening only the 2FA setup/enable endpoints). Five consecutive failures → 423 lockout. |
 | GET | `/api/auth/me` | member | `{ user, unreadNotifications }`. `user` carries `totpEnabled`. |
 | POST | `/api/auth/verify-email` | – | `{ token }` → `{ verified: true }`. Single-use. |
 | POST | `/api/auth/resend-verification` | member | Re-sends to the caller's own address. Does **not** invalidate an already-issued link. |

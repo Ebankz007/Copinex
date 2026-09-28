@@ -1,9 +1,9 @@
 /**
- * Compensation admin + jobs integration tests — §7 settlements, §10 flagged
- * milestone resolution, §6 leadership fulfillment, and the evaluate-ranks job.
+ * Compensation admin + jobs integration tests â€” Â§7 settlements, Â§10 flagged
+ * milestone resolution, Â§6 leadership fulfillment, and the evaluate-ranks job.
  *
  * Money math (per $100 realized profit, integer cents):
- *   client 6000 / sponsor 1000 / company 3000 — §7 split.
+ *   client 6000 / sponsor 1000 / company 3000 â€” Â§7 split.
  *   An unallocated sponsor share (no direct sponsor) reverts to the company:
  *   company_share_cents = 3000 + 1000 = 4000 (nominal sponsor share preserved).
  *
@@ -13,11 +13,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function resetDb() {
   await pool.query(`
@@ -43,11 +44,9 @@ async function makeAdmin(userId: string) {
   await pool.query(`UPDATE users SET role = 'ADMIN' WHERE id = $1`, [userId]);
 }
 
-async function login(email: string): Promise<{ token: string }> {
-  const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body;
-}
+  async function login(email: string): Promise<{ token: string }> {
+    return loginWithEnrollment(app, email);
+  }
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
@@ -68,7 +67,7 @@ async function setInactive(userId: string) {
   await pool.query(`UPDATE users SET is_active = false, status = 'INACTIVE' WHERE id = $1`, [userId]);
 }
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(async () => {
   await resetDb();
@@ -82,7 +81,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('§7 settlements — record + process', () => {
+describe('Â§7 settlements â€” record + process', () => {
   it('splits $100 profit 60/10/30 and credits the active sponsor 10%', async () => {
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', alice.user.id);
@@ -119,11 +118,11 @@ describe('§7 settlements — record + process', () => {
     expect(ledger.rows[0].source_id).toBe(s.id);
     expect(Number(ledger.rows[0].amount_cents)).toBe(1000);
 
-    // The client's 60% stays on the client's own account — no platform credit.
+    // The client's 60% stays on the client's own account â€” no platform credit.
     expect(await walletBalance(bob.user.id)).toBe(0);
   });
 
-  it('pays the inactive sponsor the 10% share — every account earns', async () => {
+  it('pays the inactive sponsor the 10% share â€” every account earns', async () => {
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', alice.user.id);
     const carol = await register('carol@test.dev', bob.user.id);
@@ -141,7 +140,7 @@ describe('§7 settlements — record + process', () => {
     expect(res.body.settlement.sponsorShareCents).toBe(1000);
     // bob: $15 direct (carol) + $10 settlement share.
     expect(await walletBalance(bob.user.id)).toBe(2500);
-    // alice: $15 direct (bob) + $2 gen2 (carol) — no settlement share.
+    // alice: $15 direct (bob) + $2 gen2 (carol) â€” no settlement share.
     expect(await walletBalance(alice.user.id)).toBe(1700);
   });
 
@@ -219,9 +218,9 @@ describe('§7 settlements — record + process', () => {
   });
 });
 
-describe('§10 flagged milestone resolution', () => {
+describe('Â§10 flagged milestone resolution', () => {
   it('flags when underfunded, refuses to overpay, then pays once funded', async () => {
-    // 5 registrations → pool 2000 < rank-1 reward 3500 → FLAGGED.
+    // 5 registrations â†’ pool 2000 < rank-1 reward 3500 â†’ FLAGGED.
     const alice = await register('alice@test.dev');
     await register('bob@test.dev', alice.user.id);
     await register('carol@test.dev', alice.user.id);
@@ -236,23 +235,23 @@ describe('§10 flagged milestone resolution', () => {
     expect(list.body.milestones[0]).toMatchObject({ rankId: 1, rewardCents: 3500, status: 'FLAGGED' });
     const milestoneId = list.body.milestones[0].id;
 
-    // Pool still cannot cover it → 409, nothing paid.
+    // Pool still cannot cover it â†’ 409, nothing paid.
     const early = await request(app)
       .post(`/api/admin/ranks/milestones/${milestoneId}/pay`)
       .set(auth(admin.token));
     expect(early.status).toBe(409);
     expect(early.body.error).toBe('POOL_INSUFFICIENT');
     expect(await poolBalance('RANK_BONUS')).toBe(2000);
-    expect(await walletBalance(alice.user.id)).toBe(6000); // 4 × $15 direct only
+    expect(await walletBalance(alice.user.id)).toBe(6000); // 4 Ã— $15 direct only
 
-    // Fund the pool (simulates accumulated registrations) → pay succeeds.
+    // Fund the pool (simulates accumulated registrations) â†’ pay succeeds.
     await pool.query(`UPDATE pools SET balance_cents = 3600 WHERE name = 'RANK_BONUS'`);
     const pay = await request(app)
       .post(`/api/admin/ranks/milestones/${milestoneId}/pay`)
       .set(auth(admin.token));
     expect(pay.status).toBe(200);
     expect(pay.body.milestone.status).toBe('PAID');
-    expect(await poolBalance('RANK_BONUS')).toBe(100); // 3600 − 3500
+    expect(await poolBalance('RANK_BONUS')).toBe(100); // 3600 âˆ’ 3500
     expect(await walletBalance(alice.user.id)).toBe(9500); // +3500 rank payout
 
     const ledger = await pool.query(
@@ -264,7 +263,7 @@ describe('§10 flagged milestone resolution', () => {
     expect(ledger.rows[0].source_id).toBe(milestoneId);
     expect(Number(ledger.rows[0].amount_cents)).toBe(3500);
 
-    // Already paid → 409 NOT_FLAGGED. Unknown id → 404.
+    // Already paid â†’ 409 NOT_FLAGGED. Unknown id â†’ 404.
     const again = await request(app)
       .post(`/api/admin/ranks/milestones/${milestoneId}/pay`)
       .set(auth(admin.token));
@@ -278,8 +277,8 @@ describe('§10 flagged milestone resolution', () => {
   });
 });
 
-describe('§6 leadership rewards + the evaluate-ranks job', () => {
-  /** alice ← 2 matrix legs (bob, carol), 3 members each — all at associate rank 3. */
+describe('Â§6 leadership rewards + the evaluate-ranks job', () => {
+  /** alice â† 2 matrix legs (bob, carol), 3 members each â€” all at associate rank 3. */
   async function buildLeadershipTree(): Promise<{ alice: { id: string }; adminToken: string }> {
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', alice.user.id);
@@ -323,7 +322,7 @@ describe('§6 leadership rewards + the evaluate-ranks job', () => {
       .set(auth(adminToken));
     expect(paidOnly.body.rewards).toHaveLength(0);
 
-    // Fulfill → PAID; fulfilling again → 404 (no longer REVIEW).
+    // Fulfill â†’ PAID; fulfilling again â†’ 404 (no longer REVIEW).
     const fulfill = await request(app)
       .post(`/api/admin/ranks/leadership/${rewardId}/fulfill`)
       .set(auth(adminToken));
@@ -339,7 +338,7 @@ describe('§6 leadership rewards + the evaluate-ranks job', () => {
     expect(Number(user.rows[0].highest_leadership_rank)).toBe(1);
   });
 
-  it('is idempotent — a second run creates nothing new', async () => {
+  it('is idempotent â€” a second run creates nothing new', async () => {
     const { adminToken } = await buildLeadershipTree();
 
     await request(app).post('/api/jobs/evaluate-ranks').set(auth(adminToken));

@@ -3,7 +3,7 @@
  *
  * Policy: a member is ACTIVE once the $50 activation fee is paid.
  * Until then they register (link or direct), earn commissions, and see the
- * whole site — but monetary activities (withdraw / invest / PAMM) are gated
+ * whole site â€” but monetary activities (withdraw / invest / PAMM) are gated
  * with 403 MEMBERSHIP_NOT_ACTIVATED. Admin activates via the interim rail;
  * the payment-provider webhook will call the same service path later.
  */
@@ -11,11 +11,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function resetDb() {
   await pool.query(`
@@ -57,17 +58,17 @@ async function fundWallet(userId: string, walletType: string, amountCents: numbe
 async function addBroker(): Promise<string> {
   const adminUser = await register('act-admin@test.dev');
   await makeAdmin(adminUser.user.id);
-  const login = await request(app).post('/api/auth/login').send({ email: 'act-admin@test.dev', password: 'password123' });
-  const res = await request(app)
-    .post('/api/admin/brokers')
-    .set({ Authorization: `Bearer ${login.body.token}` })
+    const { token } = await loginWithEnrollment(app, 'act-admin@test.dev');
+    const res = await request(app)
+      .post('/api/admin/brokers')
+      .set({ Authorization: `Bearer ${token}` })
     .send({ name: 'PUPRIME', code: 'PU', pammLink: 'https://pamm.puprime.com/private/copinex' });
   return res.body.broker.id as string;
 }
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(async () => {
   await resetDb();
@@ -98,7 +99,7 @@ describe('Active Member policy', () => {
     const sponsor = await register('sponsor@test.dev');
     const member = await register('earner@test.dev');
 
-    // Register again through the pipeline → sponsor earns direct bonus.
+    // Register again through the pipeline â†’ sponsor earns direct bonus.
     await register('downline@test.dev', sponsor.user.id);
 
     const sponsorWallet = await pool.query(
@@ -137,11 +138,10 @@ describe('Active Member policy', () => {
     expect(pamm.body.error).toBe('MEMBERSHIP_NOT_ACTIVATED');
   });
 
-  it('admin lists unactivated members and activates one → registration PAID, gates open', async () => {
+  it('admin lists unactivated members and activates one â†’ registration PAID, gates open', async () => {
     const adminUser = await register('act-admin@test.dev');
     await makeAdmin(adminUser.user.id);
-    const adminLogin = await request(app).post('/api/auth/login').send({ email: 'act-admin@test.dev', password: 'password123' });
-    const adminToken = adminLogin.body.token as string;
+      const adminToken = (await loginWithEnrollment(app, 'act-admin@test.dev')).token;
 
     const member = await register('paying@test.dev');
     await fundWallet(member.user.id, 'COPINEX', 100000);
@@ -183,11 +183,10 @@ describe('Active Member policy', () => {
     expect(me.body.user.membershipActivated).toBe(true);
   });
 
-  it('activating twice → 409; non-admin cannot activate → 403', async () => {
+  it('activating twice â†’ 409; non-admin cannot activate â†’ 403', async () => {
     const adminUser = await register('act-admin@test.dev');
     await makeAdmin(adminUser.user.id);
-    const adminLogin = await request(app).post('/api/auth/login').send({ email: 'act-admin@test.dev', password: 'password123' });
-    const adminToken = adminLogin.body.token as string;
+      const adminToken = (await loginWithEnrollment(app, 'act-admin@test.dev')).token;
 
     const member = await register('twice@test.dev');
 
@@ -209,14 +208,14 @@ describe('Active Member policy', () => {
     expect(forbidden.status).toBe(403);
   });
 
-  it('activating an unknown member → 404', async () => {
+  it('activating an unknown member â†’ 404', async () => {
     const adminUser = await register('act-admin@test.dev');
     await makeAdmin(adminUser.user.id);
-    const adminLogin = await request(app).post('/api/auth/login').send({ email: 'act-admin@test.dev', password: 'password123' });
+      const adminToken = (await loginWithEnrollment(app, 'act-admin@test.dev')).token;
 
-    const res = await request(app)
-      .post('/api/admin/members/00000000-0000-0000-0000-000000000000/activate')
-      .set(auth(adminLogin.body.token));
+      const res = await request(app)
+        .post('/api/admin/members/00000000-0000-0000-0000-000000000000/activate')
+        .set(auth(adminToken));
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('NOT_FOUND');
   });

@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { logger } from './config/logger.js';
+import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { globalLimiter, authLimiter } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
@@ -16,6 +17,11 @@ import { webhooksRouter } from './routes/webhooks.js';
 
 export function createApp() {
   const app = express();
+
+  // Trust the upstream proxy's X-Forwarded-For only when configured (see
+  // TRUST_PROXY in config/env.ts). Correct client IPs feed the rate
+  // limiters and the audit log.
+  if (env.TRUST_PROXY) app.set('trust proxy', 1);
 
   // Security headers: X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
   // HSTS (production only), and a default CSP. The API serves JSON only, so the

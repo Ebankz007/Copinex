@@ -15,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 // Capture the raw token out of the dev email transport. Only the hash is
 // persisted, so this is the only way to drive the reset/verify flows.
@@ -35,7 +36,7 @@ vi.mock('../src/services/email.js', async () => {
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function resetDb() {
   await pool.query(`
@@ -60,11 +61,9 @@ async function register(
   return res.body;
 }
 
-async function login(email: string, password = 'password123') {
-  const res = await request(app).post('/api/auth/login').send({ email, password });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body.token as string;
-}
+  async function login(email: string, password = 'password123') {
+    return (await loginWithEnrollment(app, email, password)).token;
+  }
 
 async function makeAdmin(userId: string) {
   await pool.query(`UPDATE users SET role = 'ADMIN' WHERE id = $1`, [userId]);
@@ -87,7 +86,7 @@ async function activeSessionCount(userId: string): Promise<number> {
   return rows[0].n as number;
 }
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(resetDb);
 beforeEach(async () => {
@@ -350,7 +349,7 @@ describe('admin surface', () => {
   /**
    * A SUPERADMIN caller. Role changes are SUPERADMIN-only (migration 0009), so
    * any test that exercises a `role` write must use one of these rather than an
-   * ADMIN — see tests/role-authority.integration.test.ts for the gate itself.
+   * ADMIN â€” see tests/role-authority.integration.test.ts for the gate itself.
    */
   async function superAdminToken(): Promise<{ token: string; id: string }> {
     const { user } = await register('root@test.dev');
@@ -435,7 +434,7 @@ describe('admin surface', () => {
     expect(onlyActive.status).toBe(200);
     expect(onlyActive.body.members).toHaveLength(0);
 
-    // A superadmin still cannot demote themself — that is the lockout guard, and
+    // A superadmin still cannot demote themself â€” that is the lockout guard, and
     // it is checked after the authority gate so it only ever fires for a caller
     // who actually holds the power.
     const root = await superAdminToken();

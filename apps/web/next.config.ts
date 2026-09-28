@@ -27,8 +27,9 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             // 'unsafe-inline' for script/style is required by Next.js hydration
             // without a nonce middleware (documented upgrade path: nonces).
-            // connect-src 'self' blocks injected scripts from exfiltrating the
-            // localStorage bearer token — the threat that matters here.
+            // connect-src 'self' keeps injected scripts from calling home —
+            // and since the session moved to an httpOnly cookie, there is no
+            // longer a token in JavaScript worth exfiltrating at all.
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline'",

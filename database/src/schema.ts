@@ -98,6 +98,13 @@ export const users = pgTable(
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
     /**
+     * Login lockout: consecutive failed password/2FA attempts and the moment
+     * the lock lifts. Reset to zero on every successful login. See
+     * apps/api/src/services/login-lockout.ts for the backoff schedule.
+     */
+    failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    /**
      * TOTP two-factor state. The secret is stored AES-256-GCM encrypted (key
      * derived from JWT_SECRET — see apps/api/src/lib/totp.ts), never plaintext:
      * a database read alone must not yield a working second factor.

@@ -1,8 +1,8 @@
 /**
  * Q4 payments integration tests (2026-09-26): Pay2Crypto crypto rail.
  *
- * Collection rail: ACTIVATION ($50 fee → membership unlock) and DEPOSIT
- * (→ COPINEX wallet credit). The webhook is the money-confirming event —
+ * Collection rail: ACTIVATION ($50 fee â†’ membership unlock) and DEPOSIT
+ * (â†’ COPINEX wallet credit). The webhook is the money-confirming event â€”
  * secret-gated, idempotent, ref/amount-verified. Mock mode (no merchant
  * credentials in tests) returns synthetic checkout URLs.
  */
@@ -10,12 +10,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 const WEBHOOK_SECRET = process.env.PAY2CRYPTO_WEBHOOK_SECRET!;
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function resetDb() {
   await pool.query(`
@@ -67,7 +68,7 @@ const webhook = (body: unknown, secret = WEBHOOK_SECRET) => ({
   ...(secret ? { 'x-pay2crypto-secret': secret } : {}),
 });
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(async () => {
   await resetDb();
@@ -81,7 +82,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('Q4 crypto payments — invoices', () => {
+describe('Q4 crypto payments â€” invoices', () => {
   it('unactivated member creates the $50 ACTIVATION invoice (mock checkout URL)', async () => {
     const member = await register('inv@test.dev');
 
@@ -112,10 +113,10 @@ describe('Q4 crypto payments — invoices', () => {
     expect(res.body.payment.status).toBe('PENDING');
   });
 
-  it('invalid deposit amount → 400; unactivated deposit → 403; double activation → 409', async () => {
+  it('invalid deposit amount â†’ 400; unactivated deposit â†’ 403; double activation â†’ 409', async () => {
     const member = await register('guard@test.dev');
 
-    // Invalid amount on an ACTIVATED member → zod 400 (the 403 gate would mask it otherwise).
+    // Invalid amount on an ACTIVATED member â†’ zod 400 (the 403 gate would mask it otherwise).
     const activated = await register('guard-active@test.dev');
     await pool.query(`UPDATE users SET membership_activated = true, activated_at = now() WHERE id = $1`, [activated.user.id]);
     const bad = await request(app)
@@ -137,7 +138,7 @@ describe('Q4 crypto payments — invoices', () => {
     expect(again.body.error).toBe('PENDING_PAYMENT_EXISTS');
   });
 
-  it('GET /payments lists the member’s own payments, newest first', async () => {
+  it('GET /payments lists the memberâ€™s own payments, newest first', async () => {
     const member = await register('list@test.dev');
     await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
 
@@ -148,7 +149,7 @@ describe('Q4 crypto payments — invoices', () => {
   });
 });
 
-describe('Q4 crypto payments — webhook', () => {
+describe('Q4 crypto payments â€” webhook', () => {
   it('ACTIVATION webhook activates the membership and flips registration to PAID', async () => {
     const member = await register('web-act@test.dev');
     const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
@@ -216,7 +217,7 @@ describe('Q4 crypto payments — webhook', () => {
     expect(Number(ledger.rows[0].amount_cents)).toBe(100000);
   });
 
-  it('webhook is idempotent — a repeat confirmation does not double-credit', async () => {
+  it('webhook is idempotent â€” a repeat confirmation does not double-credit', async () => {
     const member = await register('web-idem@test.dev');
     await pool.query(`UPDATE users SET membership_activated = true, activated_at = now() WHERE id = $1`, [member.user.id]);
     const created = await request(app)
@@ -254,8 +255,8 @@ describe('Q4 crypto payments — webhook', () => {
   });
 });
 
-describe('Q4 crypto payments — webhook forgery protection', () => {
-  it('wrong or missing secret → 401', async () => {
+describe('Q4 crypto payments â€” webhook forgery protection', () => {
+  it('wrong or missing secret â†’ 401', async () => {
     const member = await register('forgery@test.dev');
     const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
     const paymentRef = created.body.payment.paymentRef as string;
@@ -273,7 +274,7 @@ describe('Q4 crypto payments — webhook forgery protection', () => {
     expect(missing.status).toBe(401);
   });
 
-  it('unknown payment_ref → 404', async () => {
+  it('unknown payment_ref â†’ 404', async () => {
     const res = await request(app)
       .post('/api/webhooks/pay2crypto')
       .set(webhook({}))
@@ -282,7 +283,7 @@ describe('Q4 crypto payments — webhook forgery protection', () => {
     expect(res.body.error).toBe('NOT_FOUND');
   });
 
-  it('amount mismatch → 400 and nothing is applied', async () => {
+  it('amount mismatch â†’ 400 and nothing is applied', async () => {
     const member = await register('web-amt@test.dev');
     const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
     const paymentRef = created.body.payment.paymentRef as string;
@@ -299,7 +300,7 @@ describe('Q4 crypto payments — webhook forgery protection', () => {
   });
 });
 
-describe('Q4 crypto payments — withdrawal payout txid', () => {
+describe('Q4 crypto payments â€” withdrawal payout txid', () => {
   it('admin approval records the on-chain payout txid', async () => {
     const member = await register('payout@test.dev');
     await pool.query(`UPDATE users SET membership_activated = true, activated_at = now() WHERE id = $1`, [member.user.id]);
@@ -314,11 +315,11 @@ describe('Q4 crypto payments — withdrawal payout txid', () => {
 
     const adminUser = await register('payout-admin@test.dev');
     await makeAdmin(adminUser.user.id);
-    const adminLogin = await request(app).post('/api/auth/login').send({ email: 'payout-admin@test.dev', password: 'password123' });
+    const { token: adminToken } = await loginWithEnrollment(app, 'payout-admin@test.dev');
 
     const approve = await request(app)
       .post(`/api/admin/wallets/withdrawals/${requestId}/approve`)
-      .set(auth(adminLogin.body.token))
+      .set(auth(adminToken))
       .send({ payoutTxid: '0xTXID1234567890abcdef' });
     expect(approve.status).toBe(200);
     expect(approve.body.request.status).toBe('PAID');

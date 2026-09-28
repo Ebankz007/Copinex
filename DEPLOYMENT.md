@@ -148,8 +148,9 @@ operation (see migration 0002 note: CHECKs/triggers live in SQL only).
 - Money invariants are DB-enforced, not application-enforced: `CHECK`
   constraints and a trigger in migration `0002` keep wallets, pools and share
   columns non-negative, and those live in SQL only (not in `schema.ts`).
-- **Known trade-off**: bearer token in localStorage (XSS-exposed). Mitigated by
-  CSP `connect-src 'self'`. Upgrade path: httpOnly cookie auth + CSRF protection.
-  Recommended before a public launch with real balances.
+- **Closed 2026-09-28**: sessions moved to httpOnly, SameSite=Strict cookies
+  (bearer kept for tests/tooling); CSRF posture is Strict + same-origin proxy
+  + no mutating GETs. Remaining: nonce-based CSP so `unsafe-inline` can leave
+  `script-src`.
 
 Full honest review, including what is *not* covered: `docs/security-review.md`.

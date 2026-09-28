@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiError, login, register, verifyTwoFactor } from "@/lib/api";
+import { ApiError, login, register, setPendingEnrollChallenge, verifyTwoFactor } from "@/lib/api";
 
 type Mode = "login" | "register";
 
@@ -47,6 +47,15 @@ export function AuthForm({
         } else {
           const res = await login(email, password);
           if ("challenge" in res) {
+            if ("requiresEnrollment" in res) {
+              // Staff with no second factor enrolled: the password earned an
+              // enrolment challenge, held in memory (never the URL), and the
+              // enrol page completes setup before any session exists.
+              setPendingEnrollChallenge(res.challenge);
+              router.push("/enroll-2fa");
+              setBusy(false);
+              return;
+            }
             // Password correct, second factor still owed — stay on this
             // page and ask for the authenticator code.
             setChallenge(res.challenge);

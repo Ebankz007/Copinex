@@ -27,6 +27,12 @@ const envSchema = z.object({
   // is testable without a mail server. Set SMTP_URL for real delivery.
   SMTP_URL: z.string().optional(),
   EMAIL_FROM: z.string().email().default('no-reply@copinex.com'),
+  // Behind a reverse proxy (TLS terminates upstream), req.ip resolves to the
+  // proxy unless Express trusts it — which collapses every member into one
+  // rate-limit bucket and logs the proxy IP on every audit row. Set
+  // TRUST_PROXY=1 in production. Leave 0 when the API is directly exposed,
+  // or a client could spoof X-Forwarded-For past the limiters.
+  TRUST_PROXY: z.coerce.boolean().default(false),
   // Pay2Crypto crypto payment rail (non-custodial, TRC20). Unset = mock mode:
   // createPayment returns a synthetic checkout URL and webhooks are simulated
   // in tests. Set all three for live operation.

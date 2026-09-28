@@ -1,7 +1,8 @@
 /**
- * API client. Uses the Bearer token from localStorage when present.
- * Without a token (no login UI yet) the data layer falls back to the
- * engine-computed demo data — clearly badged in the UI.
+ * API client. The session token lives in an httpOnly cookie (set and cleared
+ * by the API) — JavaScript never sees it, which closes the
+ * localStorage-exfiltration hole. What the UI needs is only the *presence*
+ * signal, via the readable `copinex_authed` flag cookie.
  */
 import {
   createDemoInvestment,
@@ -137,23 +138,28 @@ export interface PammConnectionDto {
   broker: { id: string; name: string; code: string };
 }
 
-const TOKEN_KEY = "copinex_token";
+const AUTH_FLAG = "copinex_authed";
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+/**
+ * Presence signal only — it confers nothing. Every request is authenticated
+ * server-side against the httpOnly session cookie, which document.cookie,
+ * devtools, and injected scripts alike cannot read.
+ */
+function hasAuthFlag(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie
+    .split(";")
+    .some((part) => part.trim().startsWith(`${AUTH_FLAG}=`));
 }
 
-export function setToken(token: string): void {
-  window.localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  window.localStorage.removeItem(TOKEN_KEY);
+/** Drop the local presence signal (the API clears the real cookies). */
+export function clearAuthFlag(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${AUTH_FLAG}=; Max-Age=0; path=/`;
 }
 
 export function isDemoMode(): boolean {
-  return getToken() === null;
+  return !hasAuthFlag();
 }
 
 /** The logged-in user, or null in demo mode. */
@@ -163,29 +169,30 @@ export async function fetchMe(): Promise<UserDto | null> {
     const data = await request<{ user: UserDto }>("/auth/me");
     return data.user;
   } catch {
-    // Expired/invalid token — treat as demo rather than crash the page.
-    clearToken();
+    // Expired/invalid session — treat as demo rather than crash the page.
+    clearAuthFlag();
     return null;
   }
 }
 
 /**
- * Login result is a union: members WITHOUT 2FA get a session immediately,
- * members WITH 2FA get a 5-minute challenge that exchanges for a session at
- * verifyTwoFactor. Callers must handle both arms — the second factor is not
- * optional UI, it gates the session.
+ * Login result is a three-way union: members WITHOUT 2FA get a session
+ * immediately; members WITH 2FA get a 5-minute challenge; STAFF without an
+ * enrolled second factor get an enrolment challenge that opens ONLY the
+ * setup/enable endpoints. Callers must handle all three arms.
  */
 export type LoginResult =
   | { requiresTwoFactor: true; challenge: string }
+  | { requiresEnrollment: true; challenge: string }
   | { token: string; user: UserDto };
 
 export async function login(email: string, password: string): Promise<LoginResult> {
-  const data = await request<LoginResult>("/auth/login", {
+  // No token handling here — the session arrives as httpOnly cookies on the
+  // response, and the browser attaches them to every later call itself.
+  return request<LoginResult>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  if ("token" in data) setToken(data.token);
-  return data;
 }
 
 export async function register(input: {
@@ -198,7 +205,6 @@ export async function register(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-  setToken(data.token);
   return data;
 }
 
@@ -207,13 +213,22 @@ export async function logout(): Promise<void> {
   await serverLogout();
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
+async function request<T>(
+  path: string,
+  options: RequestInit & { bearer?: string } = {},
+): Promise<T> {
+  // Same-origin /api proxy: the browser attaches the httpOnly session cookie
+  // itself. No Authorization header is ever constructed in JavaScript — there
+  // is no token here to leak. The single exception is the staff-enrolment
+  // challenge, passed explicitly as `bearer` (it is short-lived and authorises
+  // only the setup/enable endpoints).
+  const { bearer, ...init } = options;
   const res = await fetch(`/api${path}`, {
-    ...options,
+    credentials: "same-origin",
+    ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       ...options.headers,
     },
   });
@@ -579,12 +594,12 @@ export async function revokeSession(sessionId: string): Promise<SessionDto> {
   return data.session;
 }
 
-/** Logout server-side (revokes the current session) then clears the token. */
+/** Logout server-side (revokes the session and drops the cookies), then clears the local presence flag. */
 export async function serverLogout(): Promise<void> {
   try {
     await request<{ ok: true }>("/auth/logout", { method: "POST", body: JSON.stringify({}) });
   } finally {
-    clearToken();
+    clearAuthFlag();
   }
 }
 
@@ -593,6 +608,44 @@ export async function serverLogout(): Promise<void> {
 export interface TwoFactorSetup {
   otpauthUrl: string;
   manualKey: string;
+}
+
+/**
+ * Pending staff-enrolment challenge, held in memory (never the URL — URLs
+ * leak into history and logs). Set by the login form when the server answers
+ * requiresEnrollment; consumed once by the enrol page.
+ */
+let pendingEnrollChallenge: string | null = null;
+
+export function setPendingEnrollChallenge(challenge: string): void {
+  pendingEnrollChallenge = challenge;
+}
+
+export function takePendingEnrollChallenge(): string | null {
+  const challenge = pendingEnrollChallenge;
+  pendingEnrollChallenge = null;
+  return challenge;
+}
+
+/** Phase 1 over an enrolment challenge (no session exists yet). */
+export async function enrollSetup(challenge: string): Promise<TwoFactorSetup> {
+  return request<TwoFactorSetup>("/auth/2fa/setup", {
+    method: "POST",
+    bearer: challenge,
+    body: JSON.stringify({}),
+  });
+}
+
+/** Phase 2 over an enrolment challenge → backup codes AND the first session. */
+export async function enrollEnable(
+  challenge: string,
+  token: string,
+): Promise<{ backupCodes: string[]; token: string; user: UserDto }> {
+  return request<{ backupCodes: string[]; token: string; user: UserDto }>("/auth/2fa/enable", {
+    method: "POST",
+    bearer: challenge,
+    body: JSON.stringify({ token }),
+  });
 }
 
 /** Phase 1: store an unenrolled secret, get it back for scanning. */
@@ -620,7 +673,6 @@ export async function verifyTwoFactor(
     "/auth/2fa/verify",
     { method: "POST", body: JSON.stringify({ challenge, token }) },
   );
-  setToken(data.token);
   return data;
 }
 

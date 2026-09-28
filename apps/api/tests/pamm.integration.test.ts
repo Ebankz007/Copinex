@@ -1,9 +1,9 @@
 /**
- * PAMM Service integration tests — broker directory (admin CRUD) and
- * connection requests (client select → request → redirect link).
+ * PAMM Service integration tests â€” broker directory (admin CRUD) and
+ * connection requests (client select â†’ request â†’ redirect link).
  *
- * Flow under test: admin adds brokers → client sees the active list →
- * client submits a connection request → gets the broker's private PAMM
+ * Flow under test: admin adds brokers â†’ client sees the active list â†’
+ * client submits a connection request â†’ gets the broker's private PAMM
  * link; admin can remove a broker from the client-facing list (soft
  * deactivate, history preserved).
  */
@@ -11,11 +11,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function resetDb() {
   await pool.query(`
@@ -49,11 +50,9 @@ async function activate(userId: string) {
   );
 }
 
-async function login(email: string): Promise<{ token: string }> {
-  const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body;
-}
+  async function login(email: string): Promise<{ token: string }> {
+    return loginWithEnrollment(app, email);
+  }
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
@@ -63,7 +62,7 @@ const BROKER_INPUT = {
   pammLink: 'https://pamm.puprime.com/private/copinex',
 };
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(async () => {
   await resetDb();
@@ -77,14 +76,14 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('broker directory — admin CRUD', () => {
+describe('broker directory â€” admin CRUD', () => {
   it('public list is empty before any broker is added', async () => {
     const res = await request(app).get('/api/brokers');
     expect(res.status).toBe(200);
     expect(res.body.brokers).toEqual([]);
   });
 
-  it('admin adds a broker → appears in the public list', async () => {
+  it('admin adds a broker â†’ appears in the public list', async () => {
     const adminUser = await register('admin@test.dev');
     await makeAdmin(adminUser.user.id);
     const admin = await login('admin@test.dev');
@@ -108,7 +107,7 @@ describe('broker directory — admin CRUD', () => {
     expect(list.body.brokers[0]).not.toHaveProperty('pammLink');
   });
 
-  it('duplicate broker code → 409', async () => {
+  it('duplicate broker code â†’ 409', async () => {
     const adminUser = await register('admin@test.dev');
     await makeAdmin(adminUser.user.id);
     const admin = await login('admin@test.dev');
@@ -122,7 +121,7 @@ describe('broker directory — admin CRUD', () => {
     expect(dup.body.error).toBe('BROKER_EXISTS');
   });
 
-  it('invalid pamm link → 400', async () => {
+  it('invalid pamm link â†’ 400', async () => {
     const adminUser = await register('admin@test.dev');
     await makeAdmin(adminUser.user.id);
     const admin = await login('admin@test.dev');
@@ -135,7 +134,7 @@ describe('broker directory — admin CRUD', () => {
     expect(res.body.error).toBe('INVALID_PAMM_LINK');
   });
 
-  it('non-admin cannot add a broker → 403', async () => {
+  it('non-admin cannot add a broker â†’ 403', async () => {
     const member = await register('member@test.dev');
     const res = await request(app)
       .post('/api/admin/brokers')
@@ -144,7 +143,7 @@ describe('broker directory — admin CRUD', () => {
     expect(res.status).toBe(403);
   });
 
-  it('admin removes a broker → drops from public list, history preserved', async () => {
+  it('admin removes a broker â†’ drops from public list, history preserved', async () => {
     const adminUser = await register('admin@test.dev');
     await makeAdmin(adminUser.user.id);
     const admin = await login('admin@test.dev');
@@ -171,7 +170,7 @@ describe('broker directory — admin CRUD', () => {
 });
 
 describe('PAMM connection requests', () => {
-  it('client requests a connection → gets the broker private link, status REQUESTED', async () => {
+  it('client requests a connection â†’ gets the broker private link, status REQUESTED', async () => {
     const adminUser = await register('admin@test.dev');
     await makeAdmin(adminUser.user.id);
     const admin = await login('admin@test.dev');
@@ -195,12 +194,12 @@ describe('PAMM connection requests', () => {
     });
   });
 
-  it('unauthenticated request → 401', async () => {
+  it('unauthenticated request â†’ 401', async () => {
     const res = await request(app).post('/api/pamm/connections').send({ brokerId: '00000000-0000-0000-0000-000000000000' });
     expect(res.status).toBe(401);
   });
 
-  it('unknown broker → 404', async () => {
+  it('unknown broker â†’ 404', async () => {
     const client = await register('client@test.dev');
     await activate(client.user.id);
     const res = await request(app)
@@ -211,7 +210,7 @@ describe('PAMM connection requests', () => {
     expect(res.body.error).toBe('BROKER_NOT_FOUND');
   });
 
-  it('removed (inactive) broker → 400 BROKER_INACTIVE', async () => {
+  it('removed (inactive) broker â†’ 400 BROKER_INACTIVE', async () => {
     const adminUser = await register('admin@test.dev');
     await makeAdmin(adminUser.user.id);
     const admin = await login('admin@test.dev');

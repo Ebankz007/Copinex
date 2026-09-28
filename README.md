@@ -71,7 +71,8 @@ Engine constants are authoritative. The `config` table mirrors some of them for 
 - Full account surface: email verification, resend, forgot/reset password (1h TTL), profile update, change password, session list/revoke, notifications.
 - Transactional email via `SMTP_URL` (required in production) — verification (24h TTL) and reset (1h TTL) links. Without SMTP the API **throws on boot** rather than pretending reset works.
 - Rate limiting: 300 req/15min global, 20 req/15min on `/api/auth` (skipped in test env).
-- Web: the token lives in `localStorage` (`copinex_token`). No token → clearly-badged demo mode. See the known trade-off in `DEPLOYMENT.md` §5.
+- Web: the session lives in an httpOnly, SameSite=Strict cookie (`copinex_token`) — JavaScript only sees the `copinex_authed` presence flag. No session → clearly-badged demo mode.
+- Five bad passwords (or 2FA codes) in a row lock the account on a 5→60 min backoff (423 with a retry time); any success resets. TOTP 2FA is opt-in per account and **mandatory for staff** — unenrolled ADMIN/SUPERADMIN logins return an enrolment challenge instead of a session.
 
 ## Admin console
 

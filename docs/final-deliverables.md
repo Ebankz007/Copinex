@@ -20,7 +20,7 @@ only Henry can supply. **Known gap** = deliberately not done; stated plainly.
 | 4 | Admin console (8 sections incl. withdrawals, investments, content, settings, audit) | Complete |
 | 5 | Backend API (71 endpoints, permission-gated, audited) | Complete |
 | 6 | Database (28 tables, 10 migrations, DB-enforced money invariants) | Complete |
-| 7 | Test suite (186 passing: 66 engine + 120 API) | Complete |
+| 7 | Test suite (200 passing: 66 engine + 134 API) | Complete |
 | 8 | Operations (service supervisor, backup, restore, cleanup) | Complete |
 | 9 | Documentation (README, DEPLOYMENT, API reference, security review) | Complete |
 | 10 | Production launch readiness | Ready, blocked on you |
@@ -52,7 +52,8 @@ Full credential lifecycle, not just a login form:
 - Password reset (1h token) and authenticated password change
 - Device/session list with individual revocation and logout
 - Profile update
-- **TOTP two-factor** (opt-in, profile page): QR enrolment, live-code confirm,
+- **TOTP two-factor** (profile page for members, mandatory enrolment for
+  staff): QR enrolment, live-code confirm,
   ten single-use backup codes, password-gated disable. Enrolled logins return a
   5-minute challenge, never a session, until the second factor verifies.
 - **15-minute portal idle timeout**: inactivity revokes the session server-side
@@ -137,7 +138,7 @@ placement, pools, investment accrual, 90-day settlement and reconciliation.
 
 ## 7. Test suite — Complete
 
-**186 passing** — 66 engine (Vitest unit) + 120 API (Supertest integration).
+**200 passing** — 66 engine (Vitest unit) + 134 API (Supertest integration).
 
 New in this pass: `apps/api/tests/auth-security.integration.test.ts` (19 cases)
 covering session revocation on credential change, email-token single-use,
@@ -199,10 +200,11 @@ The code is ready. Five things are not mine to do:
 
 ### Recommended before real funds (from `docs/security-review.md`)
 
-TOTP 2FA shipped 2026-09-28 (opt-in per account, migration `0010`) plus a
-15-minute portal idle timeout — the remaining step is *enforcing* 2FA on staff
-accounts. Still open: httpOnly cookie auth (or nonce-based CSP), and
-`trust proxy` behind the real proxy. Also worth stating plainly: **there has
+Auth hardening landed 2026-09-28 in two passes: opt-in TOTP (migration
+`0010`) plus a 15-minute portal idle timeout, then staff 2FA enforcement,
+per-account login lockout (migration `0011`), httpOnly session cookies,
+HS256 pinning, and env-gated `TRUST_PROXY`. Still open: nonce-based CSP,
+lockout spike alerting, and setting `TRUST_PROXY=1` behind the real proxy. Also worth stating plainly: **there has
 been no penetration test and no load test.** Everything above is source review
 plus automated tests. An external pen test of the auth, admin and money paths
 is the single best pre-launch spend.
@@ -213,7 +215,7 @@ is the single best pre-launch spend.
 
 ```powershell
 cd C:\BerfamWorks\COPINEX\platform
-pnpm -r test                                          # 186 tests
+pnpm -r test                                          # 200 tests
 pnpm --filter @copinex/engine build
 pnpm --filter @copinex/database build
 pnpm --filter @copinex/api build

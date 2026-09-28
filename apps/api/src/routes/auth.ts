@@ -5,8 +5,8 @@ import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
 import { HttpError } from '../lib/http-error.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
-import { signAuthToken, signTwoFactorChallenge, verifyTwoFactorChallenge } from '../lib/jwt.js';
-import { requireAuth } from '../middleware/auth.js';
+import { signAuthToken, signEnrollChallenge, signTwoFactorChallenge, verifyTwoFactorChallenge } from '../lib/jwt.js';
+import { requireAuth, requireAuthOrEnrollChallenge } from '../middleware/auth.js';
 import { registerMember } from '../services/registration-service.js';
 import { createSession, listSessions, revokeAllSessions, revokeSession } from '../services/sessions.js';
 import {
@@ -16,6 +16,9 @@ import {
   getTwoFactorState,
   verifyChallenge,
 } from '../services/two-factor.js';
+import { assertNotLocked, recordFailure, recordSuccess, throwFreshLock } from '../services/login-lockout.js';
+import { isAdminRole } from '../lib/roles.js';
+import { clearSessionCookies, setSessionCookies, tokenFromCookies } from '../lib/cookies.js';
 import { consumeEmailToken, issueEmailToken } from '../services/email-tokens.js';
 import { createNotification, listNotifications, markAllNotificationsRead, markNotificationRead, unreadCount } from '../services/notifications.js';
 import { sha256 } from '../lib/tokens.js';
@@ -95,6 +98,9 @@ authRouter.post('/register', async (req, res, next) => {
 
     const token = signAuthToken({ sub: result.user.id, email: result.user.email, role: result.user.role });
     await createSession(result.user.id, token, sessionInfo(req));
+    // The token stays in the body for non-browser clients; browsers take it
+    // from the httpOnly cookie instead and must never touch this value.
+    setSessionCookies(res, token);
 
     await createNotification({
       userId: result.user.id,
@@ -128,31 +134,41 @@ authRouter.post('/login', async (req, res, next) => {
       .where(eq(schema.users.email, body.email.toLowerCase()))
       .limit(1);
 
-    if (!user || !verifyPassword(body.password, user.passwordHash)) {
+    if (!user) {
+      throw new HttpError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    }
+    assertNotLocked(user);
+    if (!verifyPassword(body.password, user.passwordHash)) {
+      const lockedUntil = await recordFailure(user.id, user.failedLoginAttempts);
+      if (lockedUntil) throwFreshLock(lockedUntil);
       throw new HttpError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
     if (user.status !== 'ACTIVE' || !user.isActive) {
       throw new HttpError(403, 'ACCOUNT_DISABLED', 'This account has been disabled. Contact support.');
+    }
+    await recordSuccess(user.id);
+
+    // Staff without an enrolled second factor cannot have a session at all:
+    // the password earns a 15-minute enrolment challenge that authorises ONLY
+    // the setup/enable endpoints. Blocking outright would deadlock (nobody
+    // enrolled could ever enrol), so the login itself becomes the enrolment
+    // gate. Members are unaffected.
+    if (!user.totpEnabled && isAdminRole(user.role)) {
+      res.json({ requiresEnrollment: true, challenge: signEnrollChallenge(user.id) });
+      return;
     }
 
     // Enrolled in 2FA: the password only earns a 5-minute challenge, never a
     // session. The challenge exchanges for a session at POST /2fa/verify.
     if (user.totpEnabled) {
       const challenge = signTwoFactorChallenge(user.id);
-      await db
-        .update(schema.users)
-        .set({ lastActivityAt: new Date() })
-        .where(eq(schema.users.id, user.id));
       res.json({ requiresTwoFactor: true, challenge });
       return;
     }
 
     const token = signAuthToken({ sub: user.id, email: user.email, role: user.role });
     await createSession(user.id, token, sessionInfo(req));
-    await db
-      .update(schema.users)
-      .set({ lastActivityAt: new Date() })
-      .where(eq(schema.users.id, user.id));
+    setSessionCookies(res, token);
 
     res.json({ token, user: publicUser(user) });
   } catch (e) {
@@ -306,14 +322,21 @@ authRouter.post('/sessions/:id/revoke', requireAuth, async (req, res, next) => {
 /** Logout — revokes the current session so the token stops working immediately. */
 authRouter.post('/logout', requireAuth, async (req, res, next) => {
   try {
-    const header = req.headers.authorization!;
-    const token = header.slice('Bearer '.length);
-    const [session] = await db
-      .select({ id: schema.sessions.id })
-      .from(schema.sessions)
-      .where(eq(schema.sessions.tokenHash, sha256(token)))
-      .limit(1);
-    if (session) await revokeSession(req.user!.id, session.id);
+    // whichever credential authenticated the call (bearer or cookie) is the
+    // session being revoked; then both cookies are dropped.
+    const header = req.headers.authorization;
+    const token = header?.startsWith('Bearer ')
+      ? header.slice('Bearer '.length)
+      : tokenFromCookies(req);
+    if (token) {
+      const [session] = await db
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(eq(schema.sessions.tokenHash, sha256(token)))
+        .limit(1);
+      if (session) await revokeSession(req.user!.id, session.id);
+    }
+    clearSessionCookies(res);
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -326,7 +349,7 @@ authRouter.post('/logout', requireAuth, async (req, res, next) => {
 // endpoint sits behind the same auth rate limiter as /login.
 
 /** Phase 1: store an unenrolled secret, return it for scanning into an app. */
-authRouter.post('/2fa/setup', requireAuth, async (req, res, next) => {
+authRouter.post('/2fa/setup', requireAuthOrEnrollChallenge, async (req, res, next) => {
   try {
     const [user] = await db
       .select({ email: schema.users.email })
@@ -341,10 +364,24 @@ authRouter.post('/2fa/setup', requireAuth, async (req, res, next) => {
 });
 
 /** Phase 2: confirm a live code → enable 2FA, receive single-use backup codes. */
-authRouter.post('/2fa/enable', requireAuth, async (req, res, next) => {
+authRouter.post('/2fa/enable', requireAuthOrEnrollChallenge, async (req, res, next) => {
   try {
     const { token } = z.object({ token: z.string().min(6).max(16) }).parse(req.body);
-    res.json(await confirmSetup(req.user!.id, token));
+    const result = await confirmSetup(req.user!.id, token);
+    // Enrolment-path callers hold no session yet: proving possession IS the
+    // authentication, so mint the first session here rather than forcing a
+    // second login round-trip.
+    if ((req as { enrollChallenge?: boolean }).enrollChallenge) {
+      const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.user!.id)).limit(1);
+      if (!user) throw new HttpError(404, 'NOT_FOUND', 'User not found');
+      const sessionToken = signAuthToken({ sub: user.id, email: user.email, role: user.role });
+      await createSession(user.id, sessionToken, sessionInfo(req));
+      await recordSuccess(user.id);
+      setSessionCookies(res, sessionToken);
+      res.json({ ...result, token: sessionToken, user: publicUser(user) });
+      return;
+    }
+    res.json(result);
   } catch (e) {
     next(e);
   }
@@ -364,18 +401,28 @@ authRouter.post('/2fa/verify', async (req, res, next) => {
     }
     const result = await verifyChallenge(sub, body.token);
     if (!result.ok) {
+      // A wrong second factor counts toward lockout exactly like a wrong
+      // password — 6-digit codes are guessable without a counter.
+      const [challenged] = await db
+        .select({ failedLoginAttempts: schema.users.failedLoginAttempts, lockedUntil: schema.users.lockedUntil })
+        .from(schema.users)
+        .where(eq(schema.users.id, sub))
+        .limit(1);
+      if (challenged) {
+        const lockedUntil = await recordFailure(sub, challenged.failedLoginAttempts);
+        if (lockedUntil) throwFreshLock(lockedUntil);
+      }
       throw new HttpError(401, 'INVALID_TWO_FACTOR_CODE', 'That code did not verify. Try again.');
     }
     const [user] = await db.select().from(schema.users).where(eq(schema.users.id, sub)).limit(1);
     if (!user || user.status !== 'ACTIVE' || !user.isActive) {
       throw new HttpError(403, 'ACCOUNT_DISABLED', 'This account has been disabled. Contact support.');
     }
+    assertNotLocked(user);
+    await recordSuccess(user.id);
     const token = signAuthToken({ sub: user.id, email: user.email, role: user.role });
     await createSession(user.id, token, sessionInfo(req));
-    await db
-      .update(schema.users)
-      .set({ lastActivityAt: new Date() })
-      .where(eq(schema.users.id, user.id));
+    setSessionCookies(res, token);
     res.json({ token, user: publicUser(user), viaBackupCode: result.viaBackupCode });
   } catch (e) {
     next(e);

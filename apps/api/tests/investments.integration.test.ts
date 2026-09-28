@@ -3,13 +3,14 @@ import request from 'supertest';
 import { Pool } from 'pg';
 import { addDays } from '@copinex/engine';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 
-// ── Helpers ────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/** Mirror of the database seed — keeps each run fully deterministic. */
+/** Mirror of the database seed â€” keeps each run fully deterministic. */
 async function seedPackagesAndConfig() {
   const packages = [
     { tier: 1, name: '10% Monthly', minAmountCents: 5000, maxAmountCents: 49999, monthlyRateBps: 1000, dailyRateBps: 33 },
@@ -70,11 +71,11 @@ async function makeAdmin(userId: string) {
 }
 
 /** Login to get a fresh token (picks up role changes made after registration). */
-async function login(email: string): Promise<{ token: string; user: { id: string } }> {
-  const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body;
-}
+  async function login(email: string): Promise<{ token: string; user: { id: string } }> {
+    const { token } = await loginWithEnrollment(app, email);
+    const me = await request(app).get('/api/auth/me').set(auth(token));
+    return { token, user: me.body.user };
+  }
 
 async function insertInvestment(userId: string, packageId: string, principalCents: number, startDate: Date) {
   const res = await pool.query(
@@ -88,7 +89,7 @@ async function insertInvestment(userId: string, packageId: string, principalCent
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-// ── Tests ──────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 beforeAll(async () => {
   await resetDb();
@@ -195,8 +196,8 @@ describe('create investment', () => {
     expect(res.body.investment.principalCents).toBe(10000);
     expect(res.body.investment.packageId).toBeTruthy();
     expect(res.body.schedule.dailyCredits).toHaveLength(90);
-    expect(res.body.schedule.dailyCredits[0].amountCents).toBe(33); // $100 × 0.33%
-    expect(res.body.schedule.monthlyProfitCents).toBe(1000); // $100 × 10%
+    expect(res.body.schedule.dailyCredits[0].amountCents).toBe(33); // $100 Ã— 0.33%
+    expect(res.body.schedule.monthlyProfitCents).toBe(1000); // $100 Ã— 10%
 
     const wallet = await pool.query('SELECT balance_cents FROM wallets WHERE user_id = $1 AND wallet_type = $2', [
       user.id,
@@ -223,7 +224,7 @@ describe('create investment', () => {
 
 describe('accrual job', () => {
   it('credits daily profit, unlocks after the 90-day settlement period, credits monthly profit + 20% upline commissions', async () => {
-    // Chain: alice (admin) → bob → carol
+    // Chain: alice (admin) â†’ bob â†’ carol
     const alice = await register('alice@test.dev');
     const bob = await register('bob@test.dev', 'password123', alice.user.id);
     const carol = await register('carol@test.dev', 'password123', bob.user.id);
@@ -231,7 +232,7 @@ describe('accrual job', () => {
     const admin = await login('alice@test.dev');
 
     // Carol invests $100 (tier 1) backdated so that, as of 2026-12-15:
-    //   start = asOf - 120d → 90 daily credits done, available (start+90) passed,
+    //   start = asOf - 120d â†’ 90 daily credits done, available (start+90) passed,
     //   and one calendar-month boundary (Dec 1) has passed.
     const asOf = new Date('2026-12-15T00:00:00Z');
     const start = addDays(asOf, -120);
@@ -248,12 +249,12 @@ describe('accrual job', () => {
     expect(res.body.commissionsPaid).toBe(2);
     expect(res.body.investmentsProcessed).toBe(1);
 
-    // Carol's withdrawal wallet: 90 × 33¢ daily + $10 monthly, all available.
+    // Carol's withdrawal wallet: 90 Ã— 33Â¢ daily + $10 monthly, all available.
     const wallet = await request(app).get('/api/investments/wallet').set(auth(carol.token));
     expect(wallet.body.wallet.availableCents).toBe(90 * 33 + 1000);
     expect(wallet.body.wallet.lockedCents).toBe(0);
 
-    // Commissions: 20% of $10 = $2.00 → level1 (bob) 143¢, level2 (alice) 57¢.
+    // Commissions: 20% of $10 = $2.00 â†’ level1 (bob) 143Â¢, level2 (alice) 57Â¢.
     const comm = await pool.query('SELECT recipient_id, level, amount_cents FROM investment_commissions ORDER BY level');
     expect(comm.rows).toHaveLength(2);
     expect(comm.rows[0]).toMatchObject({ level: 1, amount_cents: 143 });
@@ -292,7 +293,7 @@ describe('accrual job', () => {
     expect(wallet.body.wallet.availableCents).toBe(0);
   });
 
-  it('is idempotent — a second run credits nothing new', async () => {
+  it('is idempotent â€” a second run credits nothing new', async () => {
     const adminReg = await register('adm3@test.dev');
     const member = await register('mem3@test.dev', 'password123', adminReg.user.id);
     await makeAdmin(adminReg.user.id);
@@ -374,7 +375,7 @@ describe('admin package management', () => {
       });
     expect(dup.status).toBe(409);
 
-    // Deactivate tier 1 → member listing excludes it.
+    // Deactivate tier 1 â†’ member listing excludes it.
     const tier1 = await pool.query('SELECT id FROM investment_packages WHERE tier = 1');
     await request(app)
       .patch(`/api/admin/investments/packages/${tier1.rows[0].id}`)
@@ -386,7 +387,7 @@ describe('admin package management', () => {
     expect(listing.body.packages).toHaveLength(5); // 4 original + new tier 6, minus tier 1
     expect(listing.body.packages.some((p: { tier: number }) => p.tier === 1)).toBe(false);
 
-    // Close an investment (tier 2 — tier 1 was deactivated above).
+    // Close an investment (tier 2 â€” tier 1 was deactivated above).
     const investor = await register('investor7@test.dev');
     await activate(investor.user.id);
     await fundWallet(investor.user.id, 'COPINEX', 100000);

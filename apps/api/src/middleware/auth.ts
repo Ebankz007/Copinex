@@ -2,7 +2,8 @@ import type { NextFunction, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
-import { verifyAuthToken } from '../lib/jwt.js';
+import { verifyAuthToken, verifyEnrollChallenge } from '../lib/jwt.js';
+import { tokenFromCookies } from '../lib/cookies.js';
 import { HttpError } from '../lib/http-error.js';
 import { isTokenSessionValid, touchSession } from '../services/sessions.js';
 import { roleHasPermission } from '../services/permissions.js';
@@ -24,12 +25,15 @@ declare global {
 }
 
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  // Bearer first (tests, tooling, and any non-browser client), then the
+  // httpOnly session cookie the web app uses. Either way the value below is
+  // a full session token subject to the same revocation check.
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
+  const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : tokenFromCookies(req);
+  if (!token) {
     next(new HttpError(401, 'UNAUTHORIZED', 'Missing bearer token'));
     return;
   }
-  const token = header.slice('Bearer '.length);
   try {
     const payload = verifyAuthToken(token);
     // Purpose guard: a 2FA challenge (or any future single-purpose token)
@@ -60,6 +64,57 @@ export function requireAdmin(req: Request, _res: Response, next: NextFunction): 
     return;
   }
   next();
+}
+
+/**
+ * Session bearer OR staff enrolment challenge. Used ONLY on the 2FA
+ * setup/enable endpoints: a staff member with no second factor enrolled
+ * holds no session, so the enrolment challenge (purpose '2fa-enroll',
+ * issued at login) stands in for one. The user is loaded truthfully from
+ * the database — the challenge carries no role claim. `req.enrollChallenge`
+ * tells the handler which credential authorised the call, so enable can mint
+ * the first session only for the enrolment path.
+ */
+export async function requireAuthOrEnrollChallenge(
+  req: Request & { enrollChallenge?: boolean },
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    next(new HttpError(401, 'UNAUTHORIZED', 'Missing bearer token'));
+    return;
+  }
+  const token = header.slice('Bearer '.length);
+  try {
+    const payload = verifyAuthToken(token);
+    if (!payload.purpose) {
+      if (!(await isTokenSessionValid(token))) {
+        next(new HttpError(401, 'UNAUTHORIZED', 'Session revoked — please log in again'));
+        return;
+      }
+      req.user = { id: payload.sub, email: payload.email, role: payload.role };
+      void touchSession(token);
+      next();
+      return;
+    }
+  } catch {
+    // Not a usable session token — fall through to the challenge check.
+  }
+  try {
+    const { sub } = verifyEnrollChallenge(token);
+    const [user] = await db
+      .select({ id: schema.users.id, email: schema.users.email, role: schema.users.role })
+      .from(schema.users)
+      .where(eq(schema.users.id, sub))
+      .limit(1);
+    if (!user) throw new Error('no such user');
+    req.user = { id: user.id, email: user.email, role: user.role };
+    req.enrollChallenge = true;
+    next();
+  } catch {
+    next(new HttpError(401, 'UNAUTHORIZED', 'Invalid or expired token'));
+  }
 }
 
 /**

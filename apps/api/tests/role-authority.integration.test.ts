@@ -20,6 +20,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -49,11 +50,9 @@ async function setRole(userId: string, role: 'ADMIN' | 'SUPERADMIN') {
 }
 
 /** Re-login so the fresh role is baked into the new token. */
-async function login(email: string, password = 'password123') {
-  const res = await request(app).post('/api/auth/login').send({ email, password });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body.token as string;
-}
+  async function login(email: string, password = 'password123') {
+    return (await loginWithEnrollment(app, email, password)).token;
+  }
 
 const roleOf = async (userId: string) =>
   (await pool.query(`SELECT role::text FROM users WHERE id = $1`, [userId])).rows[0].role as string;

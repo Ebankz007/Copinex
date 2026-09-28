@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin audit trail (R27) integration tests.
  *
  * Every mutating admin action writes an append-only row (admin id, action,
@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
+import { loginWithEnrollment } from './helpers.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -35,11 +36,9 @@ async function makeAdmin(userId: string) {
 }
 
 /** The registration token carries role MEMBER - re-login after makeAdmin to get an ADMIN token. */
-async function login(email: string): Promise<{ token: string }> {
-  const res = await request(app).post('/api/auth/login').send({ email, password: 'password123' });
-  if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body;
-}
+  async function login(email: string): Promise<{ token: string }> {
+    return loginWithEnrollment(app, email);
+  }
 
 /** Register, promote to ADMIN, and return a fresh ADMIN token. */
 async function registerAdmin(email: string): Promise<{ token: string; user: { id: string } }> {
