@@ -11,6 +11,7 @@ import {
   fetchAllBrokers,
   fetchAllConnections,
   fetchMe,
+  isAdminRole,
   removeBroker,
 } from "@/lib/api";
 
@@ -33,8 +34,10 @@ export default function AdminBrokersPage() {
   useEffect(() => {
     fetchMe()
       .then((me) => {
-        setIsAdmin(me?.role === "ADMIN");
-        if (me?.role === "ADMIN") {
+        // SUPERADMIN is staff too — the old `role === "ADMIN"` check locked
+        // the top of the hierarchy out of its own broker settings.
+        setIsAdmin(isAdminRole(me?.role));
+        if (isAdminRole(me?.role)) {
           load().catch(() => setError("Could not load broker data."));
         }
       })
