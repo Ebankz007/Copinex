@@ -81,12 +81,16 @@ export function DashboardCenter() {
   const activated = user?.membershipActivated ?? false;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
+    <main className="mx-auto w-full max-w-md px-4 pb-10 pt-6 sm:max-w-xl sm:px-6 lg:max-w-6xl lg:px-8 xl:max-w-7xl">
       {/* Header */}
       <DashboardHeader />
 
-      {/* Balance card */}
-      <section className="mt-6 rounded-3xl border border-white/10 bg-gradient-to-b from-navy-2 to-navy p-6">
+      {/* Two-column body from lg: primary actions on the left, wallet/CTA rail
+          on the right. Stacks to a single column on phones. */}
+      <div className="mt-6 grid gap-4 lg:grid-cols-3 lg:items-start">
+        <div className="flex flex-col gap-4 lg:col-span-2">
+          {/* Balance card */}
+          <section className="rounded-3xl border border-white/10 bg-gradient-to-b from-navy-2 to-navy p-6">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-mist">
             Total Balance (USDT)
@@ -111,66 +115,82 @@ export function DashboardCenter() {
         ) : (
           <p className="mt-3 text-xs text-mist">No earnings yet today</p>
         )}
-      </section>
+          </section>
 
-      {/* Withdrawal wallet (investment profits) */}
-      <WithdrawalWalletCard />
+          {/* Deposit / Withdraw */}
+          <section className="grid grid-cols-2 gap-3">
+            <Link
+              href="/wallet?tab=deposit"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-sm font-bold text-night transition hover:brightness-110 active:scale-[0.99]"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Deposit
+            </Link>
+            <Link
+              href="/wallet?tab=withdraw"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3.5 text-sm font-bold text-soft transition hover:bg-white/10 active:scale-[0.99]"
+            >
+              <ArrowUpRightIcon className="h-4 w-4" />
+              Withdraw
+            </Link>
+          </section>
 
-      {/* Deposit / Withdraw */}
-      <section className="mt-4 grid grid-cols-2 gap-3">
-        <Link
-          href="/wallet?tab=deposit"
-          className="flex items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-sm font-bold text-night transition hover:brightness-110 active:scale-[0.99]"
-        >
-          <PlusIcon className="h-4 w-4" />
-          Deposit
-        </Link>
-        <Link
-          href="/wallet?tab=withdraw"
-          className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3.5 text-sm font-bold text-soft transition hover:bg-white/10 active:scale-[0.99]"
-        >
-          <ArrowUpRightIcon className="h-4 w-4" />
-          Withdraw
-        </Link>
-      </section>
-
-      {/* Account status */}
-      <section className="mt-4 rounded-3xl border border-white/10 bg-navy p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-mist">
-          Account Status
-        </p>
-        <div className="mt-3 flex items-center gap-2">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${
-              !loaded || !user || activated
-                ? "bg-green shadow-[0_0_10px_rgba(102,211,19,0.8)]"
-                : "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]"
-            }`}
-          />
-          <p className="text-[15px] font-bold text-soft">
-            {!loaded || !user ? "Active" : activated ? "Active" : "Activation pending"}
-          </p>
+          {/* Account status */}
+          <section className="rounded-3xl border border-white/10 bg-navy p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-mist">
+              Account Status
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                  !loaded || !user || activated
+                    ? "bg-green shadow-[0_0_10px_rgba(102,211,19,0.8)]"
+                    : "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]"
+                }`}
+              />
+              <p className="text-[15px] font-bold text-soft">
+                {!loaded || !user ? "Active" : activated ? "Active" : "Activation pending"}
+              </p>
+            </div>
+            <p className="mt-1 text-sm text-mist">
+              {!loaded || !user
+                ? "You have full access to all features."
+                : activated
+                  ? "You have full access to all features."
+                  : "You are earning commissions — pay the $50 fee to unlock withdrawals, investments & PAMM."}
+            </p>
+          </section>
         </div>
-        <p className="mt-1 text-sm text-mist">
-          {!loaded || !user
-            ? "You have full access to all features."
-            : activated
-              ? "You have full access to all features."
-              : "You are earning commissions — pay the $50 fee to unlock withdrawals, investments & PAMM."}
-        </p>
-      </section>
 
-      {/* Copy Trade CTA */}
-      <Link
-        href="/connect"
-        className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-[15px] font-bold text-night transition hover:brightness-110 active:scale-[0.99]"
-      >
-        <CopyTradeIcon className="h-5 w-5" />
-        Copy Trade
-      </Link>
+        {/* Right rail */}
+        <div className="flex flex-col gap-4">
+          {/* Withdrawal wallet (investment profits) */}
+          <WithdrawalWalletCard />
+
+          {/* Copy Trade CTA */}
+          <Link
+            href="/connect"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-[15px] font-bold text-night transition hover:brightness-110 active:scale-[0.99]"
+          >
+            <CopyTradeIcon className="h-5 w-5" />
+            Copy Trade
+          </Link>
+
+          {/* Admin console */}
+          {loaded && isAdminRole(user?.role) && (
+            <Link
+              href="/admin"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-green/30 bg-green/10 py-3.5 text-[15px] font-bold text-green transition hover:bg-green/15 active:scale-[0.99]"
+            >
+              <ShieldCheckIcon className="h-5 w-5" />
+              {user?.role === "SUPERADMIN" ? "Superadmin Console" : "Admin Console"}
+            </Link>
+          )}
+        </div>
+      </div>
 
       {/* Feature tiles */}
-      <section className="mt-6 grid grid-cols-3 gap-3">
+      <section className="mt-6 grid grid-cols-3 gap-3 lg:grid-cols-5">
         {MEMBER_TILES.map(({ label, icon: Icon, href }) => (
           <Link
             key={label}
@@ -186,17 +206,6 @@ export function DashboardCenter() {
           </Link>
         ))}
       </section>
-
-      {/* Admin console */}
-      {loaded && isAdminRole(user?.role) && (
-        <Link
-          href="/admin"
-          className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-green/30 bg-green/10 py-3.5 text-[15px] font-bold text-green transition hover:bg-green/15 active:scale-[0.99]"
-        >
-          <ShieldCheckIcon className="h-5 w-5" />
-          {user?.role === "SUPERADMIN" ? "Superadmin Console" : "Admin Console"}
-        </Link>
-      )}
 
       {/* Footer */}
       <footer className="mt-9 text-center">

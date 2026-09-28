@@ -73,15 +73,15 @@ export default function AdminBrokersPage() {
 
   if (isAdmin === null) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
-        <p className="text-sm text-mist">Checking access…</p>
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 pb-10 pt-6 sm:max-w-xl sm:px-6 md:max-w-3xl lg:max-w-6xl lg:px-8 xl:max-w-7xl">
+        <p className="text-sm text-mist">Checking accessÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦</p>
       </main>
     );
   }
 
   if (isAdmin === false) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
+      <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 pb-10 pt-6 sm:max-w-xl sm:px-6 md:max-w-3xl lg:max-w-6xl lg:px-8 xl:max-w-7xl">
         <p className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-soft">
           Admin access required.{" "}
           <Link href="/login" className="font-semibold text-green underline">
@@ -94,7 +94,7 @@ export default function AdminBrokersPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 pb-10 pt-6 sm:max-w-xl sm:px-6 md:max-w-3xl lg:max-w-6xl lg:px-8 xl:max-w-7xl">
       <header className="flex items-center gap-3">
         <Link
           href="/admin/overview"
@@ -119,7 +119,7 @@ export default function AdminBrokersPage() {
         <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-mist">
           Add Broker
         </h2>
-        <form onSubmit={handleAdd} className="mt-4 space-y-4">
+        <form onSubmit={handleAdd} className="mt-4 grid gap-4 sm:max-w-2xl md:grid-cols-2">
           <div>
             <label htmlFor="broker-name" className="text-sm font-semibold text-soft">
               Name
@@ -149,7 +149,7 @@ export default function AdminBrokersPage() {
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-soft placeholder:text-mist focus:border-green focus:outline-none"
             />
           </div>
-          <div>
+          <div className="md:col-span-2">
             <label htmlFor="broker-link" className="text-sm font-semibold text-soft">
               PAMM Private Link
             </label>
@@ -158,7 +158,7 @@ export default function AdminBrokersPage() {
               type="url"
               value={pammLink}
               onChange={(e) => setPammLink(e.target.value)}
-              placeholder="https://pamm.broker.com/private/…"
+              placeholder="https://pamm.broker.com/private/ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
               required
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-soft placeholder:text-mist focus:border-green focus:outline-none"
             />
@@ -166,7 +166,7 @@ export default function AdminBrokersPage() {
           <button
             type="submit"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-[15px] font-bold text-night transition hover:brightness-110 disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-green py-3.5 text-[15px] font-bold text-night transition hover:brightness-110 disabled:opacity-60 md:col-span-2 md:max-w-xs"
           >
             <PlusIcon className="h-4 w-4" />
             Add Broker
@@ -179,9 +179,9 @@ export default function AdminBrokersPage() {
         <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-mist">
           Broker List ({brokers.length})
         </h2>
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {brokers.length === 0 && (
-            <p className="py-4 text-center text-sm text-mist">No brokers yet.</p>
+            <p className="col-span-full py-4 text-center text-sm text-mist">No brokers yet.</p>
           )}
           {brokers.map((broker) => (
             <div
@@ -229,9 +229,9 @@ export default function AdminBrokersPage() {
         <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-mist">
           Connection Requests ({connections.length})
         </h2>
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {connections.length === 0 && (
-            <p className="py-4 text-center text-sm text-mist">
+            <p className="col-span-full py-4 text-center text-sm text-mist">
               No connection requests yet.
             </p>
           )}

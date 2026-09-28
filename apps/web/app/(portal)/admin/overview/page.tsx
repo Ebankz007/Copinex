@@ -53,7 +53,7 @@ export default function AdminOverviewPage() {
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {metrics.map((m) => {
           const inner = (
             <>
@@ -79,53 +79,58 @@ export default function AdminOverviewPage() {
         })}
       </div>
 
-      {data && data.pools.length > 0 && (
-        <div className="mt-4">
-          <Panel title="Pools">
-            <ul className="mt-3 space-y-2">
-              {data.pools.map((p) => (
-                <li
-                  key={p.name}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-mist">{p.name}</span>
-                  <span className="font-bold text-soft">{formatCents(p.balanceCents)}</span>
-                </li>
-              ))}
-            </ul>
+      {/* Pools and recent activity sit side by side from lg up. */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {data && data.pools.length > 0 && (
+          <div>
+            <Panel title="Pools">
+              <ul className="mt-3 space-y-2">
+                {data.pools.map((p) => (
+                  <li
+                    key={p.name}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="truncate text-mist">{p.name}</span>
+                    <span className="shrink-0 font-bold text-soft">
+                      {formatCents(p.balanceCents)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </div>
+        )}
+
+        <div>
+          <Panel
+            title="Recent admin activity"
+            action={
+              <Link href="/admin/audit" className="text-xs font-bold text-green">
+                Full audit
+              </Link>
+            }
+          >
+            {data && data.recentAudit.length > 0 ? (
+              <ul className="mt-3 space-y-2.5">
+                {data.recentAudit.map((a) => (
+                  <li key={a.id} className="text-sm">
+                    <span className="font-bold text-soft">{a.action}</span>{" "}
+                    <span className="text-mist">· {a.targetType}</span>
+                    <p className="text-xs text-mist">
+                      {a.adminEmail ?? a.adminId.slice(0, 8)} ·{" "}
+                      {new Date(a.createdAt).toLocaleString()}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-mist">No admin activity recorded yet.</p>
+            )}
           </Panel>
         </div>
-      )}
-
-      <div className="mt-4">
-        <Panel
-          title="Recent admin activity"
-          action={
-            <Link href="/admin/audit" className="text-xs font-bold text-green">
-              Full audit
-            </Link>
-          }
-        >
-          {data && data.recentAudit.length > 0 ? (
-            <ul className="mt-3 space-y-2.5">
-              {data.recentAudit.map((a) => (
-                <li key={a.id} className="text-sm">
-                  <span className="font-bold text-soft">{a.action}</span>{" "}
-                  <span className="text-mist">· {a.targetType}</span>
-                  <p className="text-xs text-mist">
-                    {a.adminEmail ?? a.adminId.slice(0, 8)} ·{" "}
-                    {new Date(a.createdAt).toLocaleString()}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-mist">No admin activity recorded yet.</p>
-          )}
-        </Panel>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 sm:max-w-xs">
         <ActionButton onClick={() => window.location.reload()}>Refresh</ActionButton>
       </div>
     </PortalPage>

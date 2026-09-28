@@ -66,11 +66,11 @@ export default function AdminInvestmentsPage() {
 
       <div className="mt-4">
         <Panel title={`Investment book (${investments.length})`}>
-          {loading && <p className="mt-3 text-sm text-mist">Loading…</p>}
+          {loading && <p className="mt-3 text-sm text-mist">LoadingÃ¢â‚¬Â¦</p>}
           {!loading && investments.length === 0 && (
             <p className="mt-3 text-sm text-mist">No investments yet.</p>
           )}
-          <ul className="mt-3 space-y-2.5">
+          <ul className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {investments.map((i) => (
               <li key={i.id} className="rounded-2xl border border-white/5 bg-night-2 p-3.5">
                 <div className="flex items-start justify-between gap-3">
@@ -79,7 +79,7 @@ export default function AdminInvestmentsPage() {
                       {formatCents(i.principalCents)}
                     </p>
                     <p className="text-[11px] text-mist">
-                      {i.userId.slice(0, 8).toUpperCase()} · pkg {i.packageId.slice(0, 6)}
+                      {i.userId.slice(0, 8).toUpperCase()} Ã‚Â· pkg {i.packageId.slice(0, 6)}
                     </p>
                   </div>
                   <span
@@ -93,7 +93,7 @@ export default function AdminInvestmentsPage() {
                   </span>
                 </div>
                 <p className="mt-1.5 text-[11px] text-mist">
-                  Accrues until {new Date(i.accrualEndDate).toLocaleDateString()} · available{" "}
+                  Accrues until {new Date(i.accrualEndDate).toLocaleDateString()} Ã‚Â· available{" "}
                   {new Date(i.availableDate).toLocaleDateString()} (90-day settlement)
                 </p>
               </li>
@@ -107,7 +107,7 @@ export default function AdminInvestmentsPage() {
           {!loading && settlements.length === 0 && (
             <p className="mt-3 text-sm text-mist">No settlements recorded.</p>
           )}
-          <ul className="mt-3 space-y-2.5">
+          <ul className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {settlements.map((s) => (
               <li key={s.id} className="rounded-2xl border border-white/5 bg-night-2 p-3.5">
                 <div className="flex items-start justify-between gap-3">
@@ -116,7 +116,7 @@ export default function AdminInvestmentsPage() {
                       {formatCents(s.realizedProfitCents)}
                     </p>
                     <p className="text-[11px] text-mist">
-                      Period {s.period} · client {s.clientId.slice(0, 8).toUpperCase()}
+                      Period {s.period} Ã‚Â· client {s.clientId.slice(0, 8).toUpperCase()}
                     </p>
                   </div>
                   <span
@@ -132,8 +132,8 @@ export default function AdminInvestmentsPage() {
                   </span>
                 </div>
                 <p className="mt-1.5 text-[11px] text-mist">
-                  Client {formatCents(s.clientShareCents)} · Sponsor{" "}
-                  {formatCents(s.sponsorShareCents)} · Company {formatCents(s.companyShareCents)}
+                  Client {formatCents(s.clientShareCents)} Ã‚Â· Sponsor{" "}
+                  {formatCents(s.sponsorShareCents)} Ã‚Â· Company {formatCents(s.companyShareCents)}
                 </p>
               </li>
             ))}

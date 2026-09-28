@@ -15,7 +15,7 @@ import { formatCents } from "@/lib/format";
 const STATUSES = ["", "PENDING", "PAID", "REJECTED"] as const;
 
 /**
- * Withdrawal queue. Q4: Pay2Crypto rail only — Copinex never pays from a
+ * Withdrawal queue. Q4: Pay2Crypto rail only â€” Copinex never pays from a
  * balance; operations sends USDT manually and records the payout txid.
  */
 export default function AdminWithdrawalsPage() {
@@ -105,10 +105,10 @@ export default function AdminWithdrawalsPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
-        {loading && <p className="py-6 text-center text-sm text-mist">Loading requests…</p>}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {loading && <p className="col-span-full py-6 text-center text-sm text-mist">Loading requestsâ€¦</p>}
         {!loading && rows.length === 0 && (
-          <p className="py-6 text-center text-sm text-mist">No withdrawal requests here.</p>
+          <p className="col-span-full py-6 text-center text-sm text-mist">No withdrawal requests here.</p>
         )}
 
         {rows.map((row) => {
@@ -180,7 +180,7 @@ export default function AdminWithdrawalsPage() {
       </div>
 
       <p className="mt-6 text-xs text-mist">
-        Approving records the manual USDT transfer. Copinex does not pay from a balance — send the
+        Approving records the manual USDT transfer. Copinex does not pay from a balance â€” send the
         funds, then record the txid above.
       </p>
     </PortalPage>

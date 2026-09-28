@@ -56,7 +56,7 @@ export default function AdminMembersPage() {
     setOk(null);
     try {
       await activateMember(m.id);
-      setOk(`Activated ${m.email} — the $50 fee is recorded as paid.`);
+      setOk(`Activated ${m.email} â€” the $50 fee is recorded as paid.`);
       await load(search, filter);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Activation failed.");
@@ -90,30 +90,31 @@ export default function AdminMembersPage() {
     <PortalPage title="Members" backLabel="Back to admin console" backHref="/admin/overview">
       <AdminTabs />
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search email or name…"
-          className="w-full rounded-2xl border border-white/10 bg-night-2 px-4 py-3 text-[15px] text-soft outline-none transition focus:border-green/50"
+          placeholder="Search email or nameâ€¦"
+          aria-label="Search members"
+          className="w-full rounded-2xl border border-white/10 bg-night-2 px-4 py-3 text-[15px] text-soft outline-none transition focus:border-green/50 md:max-w-sm"
         />
-      </div>
 
-      <div className="mt-3 flex gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={`rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
-              filter === f.key
-                ? "border-green/40 bg-green/15 text-green"
-                : "border-white/10 bg-white/5 text-mist hover:text-soft"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setFilter(f.key)}
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                filter === f.key
+                  ? "border-green/40 bg-green/15 text-green"
+                  : "border-white/10 bg-white/5 text-mist hover:text-soft"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -127,14 +128,16 @@ export default function AdminMembersPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
-        {loading && <p className="py-6 text-center text-sm text-mist">Loading members…</p>}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {loading && <p className="py-6 text-center text-sm text-mist sm:col-span-2 xl:col-span-3">Loading membersâ€¦</p>}
         {!loading && members.length === 0 && (
-          <p className="py-6 text-center text-sm text-mist">No members match this filter.</p>
+          <p className="py-6 text-center text-sm text-mist sm:col-span-2 xl:col-span-3">
+            No members match this filter.
+          </p>
         )}
 
         {members.map((m) => (
-          <Panel key={m.id} className="!p-4">
+          <Panel key={m.id} className="flex h-full flex-col !p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-[15px] font-bold text-soft">
@@ -153,9 +156,9 @@ export default function AdminMembersPage() {
                 >
                   {m.membershipActivated ? "Activated" : "Unactivated"}
                 </span>
-                {m.role === "ADMIN" && (
+                {m.role !== "MEMBER" && (
                   <span className="rounded-full border border-white/15 px-2.5 py-0.5 text-[10px] font-bold text-mist">
-                    ADMIN
+                    {m.role}
                   </span>
                 )}
                 {!m.emailVerifiedAt && (
@@ -166,7 +169,7 @@ export default function AdminMembersPage() {
               </div>
             </div>
 
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex gap-2 pt-1 md:mt-auto">
               {!m.membershipActivated && (
                 <ActionButton
                   onClick={() => void onActivate(m)}
@@ -188,7 +191,7 @@ export default function AdminMembersPage() {
       </div>
 
       {editing && (
-        <div className="mt-4">
+        <div className="mt-4 sm:max-w-2xl">
           <Panel title={`Edit ${editing.email}`}>
             <div className="mt-3 space-y-3">
               <label className="block">
@@ -210,12 +213,13 @@ export default function AdminMembersPage() {
                 <select
                   value={editing.role}
                   onChange={(e) =>
-                    setEditing({ ...editing, role: e.target.value as "MEMBER" | "ADMIN" })
+                    setEditing({ ...editing, role: e.target.value as AdminMemberDto["role"] })
                   }
                   className="w-full rounded-2xl border border-white/10 bg-night-2 px-4 py-3 text-[15px] text-soft outline-none focus:border-green/50"
                 >
                   <option value="MEMBER">MEMBER</option>
                   <option value="ADMIN">ADMIN</option>
+                  <option value="SUPERADMIN">SUPERADMIN</option>
                 </select>
               </label>
               <label className="block">

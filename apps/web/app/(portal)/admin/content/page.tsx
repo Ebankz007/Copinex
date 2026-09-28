@@ -75,7 +75,7 @@ export default function AdminContentPage() {
         });
         setOk(
           draft.status === "PUBLISHED"
-            ? "Announcement published — every member has been notified."
+            ? "Announcement published â€” every member has been notified."
             : "Draft saved.",
         );
       }
@@ -140,7 +140,7 @@ export default function AdminContentPage() {
                 value={draft.body}
                 onChange={(e) => setDraft({ ...draft, body: e.target.value })}
                 rows={4}
-                placeholder="What members need to know…"
+                placeholder="What members need to knowâ€¦"
                 className="w-full resize-y rounded-2xl border border-white/10 bg-night-2 px-4 py-3 text-[15px] text-soft outline-none focus:border-green/50"
               />
             </label>
@@ -177,10 +177,10 @@ export default function AdminContentPage() {
         </Panel>
       </div>
 
-      <div className="mt-4 space-y-3">
-        {loading && <p className="py-4 text-center text-sm text-mist">Loading…</p>}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {loading && <p className="col-span-full py-4 text-center text-sm text-mist">Loadingâ€¦</p>}
         {!loading && rows.length === 0 && (
-          <p className="py-4 text-center text-sm text-mist">No announcements yet.</p>
+          <p className="col-span-full py-4 text-center text-sm text-mist">No announcements yet.</p>
         )}
 
         {rows.map((a) => (

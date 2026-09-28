@@ -19,7 +19,10 @@ export function AdminTabs() {
   const pathname = usePathname();
   return (
     <nav
-      className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1"
+      // Mobile: a swipeable rail. The negative margin must track the page frame's
+      // responsive gutter (px-4 -> sm:px-6 -> lg:px-8) or the bleed stops lining
+      // up with the edge. From lg the eight tabs fit, so they wrap instead.
+      className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:flex-wrap lg:overflow-x-visible lg:-mx-8 lg:px-8"
       aria-label="Admin console sections"
     >
       {TABS.map((tab) => {
@@ -29,7 +32,7 @@ export function AdminTabs() {
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
-            className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+            className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-bold transition ${
               active
                 ? "border-green/40 bg-green/15 text-green"
                 : "border-white/10 bg-white/5 text-mist hover:text-soft"

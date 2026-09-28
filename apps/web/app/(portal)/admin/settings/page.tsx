@@ -130,9 +130,9 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {rows.length === 0 && (
-          <p className="py-4 text-center text-sm text-mist">No settings stored yet.</p>
+          <p className="col-span-full py-4 text-center text-sm text-mist">No settings stored yet.</p>
         )}
         {rows.map((s) => (
           <Panel key={s.key} className="!p-4">
@@ -159,7 +159,7 @@ export default function AdminSettingsPage() {
       </div>
 
       {editing && (
-        <div className="mt-4">
+        <div className="mt-4 sm:max-w-2xl">
           <Panel title={`Edit ${editing.key}`}>
             <div className="mt-3 space-y-3">
               <label className="block">
@@ -198,7 +198,7 @@ export default function AdminSettingsPage() {
 
       <div className="mt-4">
         <Panel title="Add or overwrite a setting">
-          <div className="mt-3 space-y-3">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <input
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
@@ -220,7 +220,7 @@ export default function AdminSettingsPage() {
             <ActionButton onClick={() => void onCreate()} disabled={busy}>
               Save setting
             </ActionButton>
-            <p className="text-xs text-mist">
+            <p className="text-xs text-mist sm:col-span-2">
               An existing key is overwritten. Values are stored as JSON.
             </p>
           </div>

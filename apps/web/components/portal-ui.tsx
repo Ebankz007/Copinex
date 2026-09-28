@@ -4,8 +4,12 @@ import Link from "next/link";
 import { ChevronLeftIcon } from "@/components/icons";
 
 /**
- * Dark portal page frame — matches the existing member pages (max-w-md column,
- * back link, page title). Every portal route renders inside this.
+ * Dark portal page frame — matches the existing member pages (back link, page
+ * title). Every portal route renders inside this.
+ *
+ * Width is fluid, not fixed: a 448px column on a 27" monitor reads as a broken
+ * phone site, so the frame grows at sm (single narrow column), md (form pages
+ * get breathing room) and lg (wide pages lay their cards out in columns).
  */
 export function PortalPage({
   title,
@@ -19,16 +23,16 @@ export function PortalPage({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 pb-10 pt-6 sm:max-w-xl sm:px-6 md:max-w-3xl md:gap-5 lg:max-w-6xl lg:px-8 xl:max-w-7xl">
       <header className="flex items-center gap-3">
         <Link
           href={backHref}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-soft transition hover:bg-white/10"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-soft transition hover:bg-white/10"
           aria-label={backLabel}
         >
           <ChevronLeftIcon className="h-5 w-5" />
         </Link>
-        <h1 className="text-lg font-bold tracking-tight text-soft">{title}</h1>
+        <h1 className="text-lg font-bold tracking-tight text-soft sm:text-xl">{title}</h1>
       </header>
       {children}
     </main>

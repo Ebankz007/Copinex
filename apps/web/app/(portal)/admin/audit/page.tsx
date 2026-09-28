@@ -57,10 +57,10 @@ export default function AdminAuditPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
-        {loading && <p className="py-4 text-center text-sm text-mist">Loading audit log…</p>}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {loading && <p className="col-span-full py-4 text-center text-sm text-mist">Loading audit logâ€¦</p>}
         {!loading && entries.length === 0 && (
-          <p className="py-4 text-center text-sm text-mist">No admin actions recorded yet.</p>
+          <p className="col-span-full py-4 text-center text-sm text-mist">No admin actions recorded yet.</p>
         )}
 
         {entries.map((e) => (
@@ -72,8 +72,8 @@ export default function AdminAuditPage() {
               </span>
             </div>
             <p className="mt-1 text-xs text-mist">
-              {e.adminEmail ?? e.adminId.slice(0, 8)} → {e.targetType}
-              {e.targetId ? ` ${e.targetId.slice(0, 8)}` : ""} · ip {e.ip}
+              {e.adminEmail ?? e.adminId.slice(0, 8)} â†’ {e.targetType}
+              {e.targetId ? ` ${e.targetId.slice(0, 8)}` : ""} Â· ip {e.ip}
             </p>
             {e.details != null && (
               <pre className="mt-2 overflow-x-auto rounded-xl bg-night-2 p-3 text-[11px] leading-relaxed text-soft">

@@ -80,10 +80,10 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
-        {loading && <p className="py-6 text-center text-sm text-mist">Loading…</p>}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {loading && <p className="col-span-full py-6 text-center text-sm text-mist">Loadingâ€¦</p>}
         {!loading && rows.length === 0 && (
-          <p className="py-6 text-center text-sm text-mist">No notifications yet.</p>
+          <p className="col-span-full py-6 text-center text-sm text-mist">No notifications yet.</p>
         )}
 
         {rows.map((n) => (
@@ -101,7 +101,7 @@ export default function NotificationsPage() {
                   {n.body}
                 </p>
                 <p className="mt-1.5 text-[11px] text-mist">
-                  {n.type} · {new Date(n.createdAt).toLocaleString()}
+                  {n.type} Â· {new Date(n.createdAt).toLocaleString()}
                 </p>
               </div>
             </div>

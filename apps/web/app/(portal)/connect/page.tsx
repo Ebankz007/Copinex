@@ -12,7 +12,7 @@ import { ApiError, BrokerDto, fetchBrokers, fetchMe, requestPammConnection, type
 
 const STEPS = [
   { title: "Choose a partner broker", note: null },
-  { title: "Request PAMM connection", note: "Free — no processing fee" },
+  { title: "Request PAMM connection", note: "Free â€” no processing fee" },
   { title: "Invest via the broker's private PAMM link", note: "Your funds stay with the broker" },
 ];
 
@@ -38,7 +38,7 @@ export default function ConnectPage() {
     setRequestingId(broker.id);
     try {
       const { redirectUrl } = await requestPammConnection(broker.id);
-      // Redirect the client to the broker's private PAMM link — the
+      // Redirect the client to the broker's private PAMM link â€” the
       // investment happens broker-side.
       window.location.href = redirectUrl;
     } catch (e) {
@@ -56,7 +56,7 @@ export default function ConnectPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-10 pt-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 pb-10 pt-6 sm:max-w-xl sm:px-6 md:max-w-3xl lg:max-w-6xl lg:px-8 xl:max-w-7xl">
       {/* Header */}
       <header className="flex items-center gap-3">
         <Link
@@ -110,7 +110,7 @@ export default function ConnectPage() {
           <p className="text-sm font-bold text-amber-300">Activate your membership</p>
           <p className="mt-1 text-xs text-mist">
             PAMM connections unlock after you pay the one-time $50 activation fee. You are
-            already earning commissions — contact your sponsor or support to activate.
+            already earning commissions â€” contact your sponsor or support to activate.
           </p>
         </section>
       )}
@@ -122,7 +122,7 @@ export default function ConnectPage() {
         </h2>
         <div className="mt-3 space-y-3">
           {loading && (
-            <p className="py-6 text-center text-sm text-mist">Loading brokers…</p>
+            <p className="py-6 text-center text-sm text-mist">Loading brokersâ€¦</p>
           )}
           {!loading && brokers.length === 0 && (
             <p className="py-6 text-center text-sm text-mist">
@@ -147,7 +147,7 @@ export default function ConnectPage() {
                 <span className="block text-xs text-mist">PAMM Partner</span>
               </span>
               {requestingId === broker.id ? (
-                <span className="text-xs font-semibold text-green">Redirecting…</span>
+                <span className="text-xs font-semibold text-green">Redirectingâ€¦</span>
               ) : (
                 <ChevronRightIcon className="h-4 w-4 text-mist" />
               )}
