@@ -32,6 +32,13 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   const token = header.slice('Bearer '.length);
   try {
     const payload = verifyAuthToken(token);
+    // Purpose guard: a 2FA challenge (or any future single-purpose token)
+    // must never authenticate as a session, even though it shares the
+    // signing key. Session tokens never carry a purpose.
+    if (payload.purpose) {
+      next(new HttpError(401, 'UNAUTHORIZED', 'Invalid or expired token'));
+      return;
+    }
     // Logout revocation: a revoked session kills the token immediately.
     // Tokens without a session row (legacy/tooling) remain valid.
     if (!(await isTokenSessionValid(token))) {

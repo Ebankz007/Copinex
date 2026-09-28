@@ -5,7 +5,16 @@ export const metadata = {
   title: "Sign in — Copinex",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ reason?: string }>;
+}) {
+  const params = await searchParams;
+  const notice =
+    params?.reason === "inactive"
+      ? "You were signed out after 15 minutes of inactivity. Sign in again to continue."
+      : undefined;
   return (
     <main className="auth-shell">
       <div className="auth-card">
@@ -17,7 +26,7 @@ export default function LoginPage() {
         <p>Sign in to your Copinex account. Admins land in the console, members in the portal.</p>
 
         <div style={{ marginTop: 24 }}>
-          <AuthForm mode="login" />
+          <AuthForm mode="login" notice={notice} />
         </div>
       </div>
     </main>

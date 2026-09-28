@@ -97,6 +97,14 @@ export const users = pgTable(
     /** Set when the member confirms their email via the verification token. */
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
+    /**
+     * TOTP two-factor state. The secret is stored AES-256-GCM encrypted (key
+     * derived from JWT_SECRET — see apps/api/src/lib/totp.ts), never plaintext:
+     * a database read alone must not yield a working second factor.
+     */
+    totpSecretEncrypted: text('totp_secret_encrypted'),
+    totpEnabled: boolean('totp_enabled').notNull().default(false),
+    totpEnabledAt: timestamp('totp_enabled_at', { withTimezone: true }),
     highestAssociateRank: integer('highest_associate_rank').notNull().default(0),
     highestLeadershipRank: integer('highest_leadership_rank').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -579,6 +587,25 @@ export const sessions = pgTable(
     uniqueIndex('sessions_token_hash_idx').on(t.tokenHash),
     index('sessions_user_idx').on(t.userId),
   ],
+);
+
+/**
+ * Two-factor backup codes — single-use recovery codes for when the member
+ * loses their authenticator. Only sha256 hashes are stored; the plaintext is
+ * shown exactly once, at enable time. usedAt NULL = still valid.
+ */
+export const twoFactorBackupCodes = pgTable(
+  'two_factor_backup_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    codeHash: text('code_hash').notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('totp_backup_codes_user_idx').on(t.userId)],
 );
 
 /**

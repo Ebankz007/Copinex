@@ -42,8 +42,8 @@ expiry.
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | POST | `/api/auth/register` | – | `{ email, password, fullName?, sponsorId? }` → `201 { token, user, verification }`. `verification.link` is echoed **only** by the dev mail transport. `sponsorId` must be a real user UUID or the request 400s. |
-| POST | `/api/auth/login` | – | `{ email, password }` → `{ token, user }`. |
-| GET | `/api/auth/me` | member | `{ user, unreadNotifications }`. |
+| POST | `/api/auth/login` | – | `{ email, password }` → `{ token, user }`, **or** `{ requiresTwoFactor: true, challenge }` when the account has 2FA (the challenge is a 5-minute non-session token — it 401s on every `requireAuth` route). |
+| GET | `/api/auth/me` | member | `{ user, unreadNotifications }`. `user` carries `totpEnabled`. |
 | POST | `/api/auth/verify-email` | – | `{ token }` → `{ verified: true }`. Single-use. |
 | POST | `/api/auth/resend-verification` | member | Re-sends to the caller's own address. Does **not** invalidate an already-issued link. |
 | POST | `/api/auth/forgot-password` | – | Always `{ ok: true }`, even for unknown addresses (no account enumeration). Sends a 1h link. |
@@ -53,6 +53,11 @@ expiry.
 | GET | `/api/auth/sessions` | member | Active sessions with ip / userAgent / lastSeenAt. |
 | POST | `/api/auth/sessions/:id/revoke` | member | Revoke one device. |
 | POST | `/api/auth/logout` | member | Revokes the calling token. |
+| POST | `/api/auth/2fa/setup` | member | Phase 1: stores an unenrolled encrypted secret → `{ otpauthUrl, manualKey }`. 400 if already enabled. |
+| POST | `/api/auth/2fa/enable` | member | Phase 2: `{ token }` (live 6-digit code) → enables 2FA, returns ten single-use `{ backupCodes }` shown once. |
+| POST | `/api/auth/2fa/verify` | – (auth rate limit) | `{ challenge, token }` (TOTP or backup code; backup codes burn on use) → `{ token, user, viaBackupCode }`. |
+| GET | `/api/auth/2fa/status` | member | `{ enabled }`. |
+| POST | `/api/auth/2fa/disable` | member | `{ password }` → wipes the secret and all backup codes. |
 | GET | `/api/auth/notifications` | member | Notification list. |
 | POST | `/api/auth/notifications/:id/read` | member | Mark one read. |
 | POST | `/api/auth/notifications/read-all` | member | Mark all read. |

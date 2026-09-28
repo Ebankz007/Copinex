@@ -114,6 +114,7 @@ export interface UserDto {
   sponsorId: string | null;
   membershipActivated: boolean;
   activatedAt: string | null;
+  totpEnabled: boolean;
   createdAt: string;
 }
 
@@ -168,12 +169,22 @@ export async function fetchMe(): Promise<UserDto | null> {
   }
 }
 
-export async function login(email: string, password: string): Promise<{ token: string; user: UserDto }> {
-  const data = await request<{ token: string; user: UserDto }>("/auth/login", {
+/**
+ * Login result is a union: members WITHOUT 2FA get a session immediately,
+ * members WITH 2FA get a 5-minute challenge that exchanges for a session at
+ * verifyTwoFactor. Callers must handle both arms — the second factor is not
+ * optional UI, it gates the session.
+ */
+export type LoginResult =
+  | { requiresTwoFactor: true; challenge: string }
+  | { token: string; user: UserDto };
+
+export async function login(email: string, password: string): Promise<LoginResult> {
+  const data = await request<LoginResult>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  setToken(data.token);
+  if ("token" in data) setToken(data.token);
   return data;
 }
 
@@ -575,6 +586,54 @@ export async function serverLogout(): Promise<void> {
   } finally {
     clearToken();
   }
+}
+
+// ── Two-factor authentication (TOTP) ───────────────────────
+
+export interface TwoFactorSetup {
+  otpauthUrl: string;
+  manualKey: string;
+}
+
+/** Phase 1: store an unenrolled secret, get it back for scanning. */
+export async function setupTwoFactor(): Promise<TwoFactorSetup> {
+  return request<TwoFactorSetup>("/auth/2fa/setup", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+/** Phase 2: confirm a live code → 2FA on, single-use backup codes returned once. */
+export async function enableTwoFactor(token: string): Promise<{ backupCodes: string[] }> {
+  return request<{ backupCodes: string[] }>("/auth/2fa/enable", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+/** Redeem a login challenge with a TOTP or backup code → session. */
+export async function verifyTwoFactor(
+  challenge: string,
+  token: string,
+): Promise<{ token: string; user: UserDto; viaBackupCode: boolean }> {
+  const data = await request<{ token: string; user: UserDto; viaBackupCode: boolean }>(
+    "/auth/2fa/verify",
+    { method: "POST", body: JSON.stringify({ challenge, token }) },
+  );
+  setToken(data.token);
+  return data;
+}
+
+export async function twoFactorStatus(): Promise<{ enabled: boolean }> {
+  return request<{ enabled: boolean }>("/auth/2fa/status");
+}
+
+/** Disable 2FA after a password re-check. */
+export async function disableTwoFactor(password: string): Promise<{ disabled: boolean }> {
+  return request<{ disabled: boolean }>("/auth/2fa/disable", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
 }
 
 /** The member's notifications, newest first. */

@@ -37,6 +37,27 @@ revokes *every* session for that account — including any an attacker is holdin
 — and a password change revokes every *other* device while keeping the caller's
 own session alive. (Both were defects; both are fixed and covered by tests.)
 
+**Idle sessions die on their own.** The portal shell arms a 15-minute
+inactivity timer (mouse, keys, touch, scroll, or returning to the tab resets
+it). On expiry the session is revoked server-side and the member lands on the
+login page with an explanation. An unattended browser no longer holds a live
+7-day token indefinitely. This is client-enforced — a stolen token used
+*actively* before expiry still works (see **h**).
+
+**Two-factor authentication (TOTP, added 2026-09-28, migration `0010`).**
+Opt-in per account from the profile page: scan the QR (or type the manual
+key), confirm a live code, save the ten single-use backup codes. Enrolled
+logins return a 5-minute challenge instead of a session; the challenge
+exchanges for a session with a live code or an unused backup code (burned on
+use). Secrets are AES-256-GCM encrypted at rest under a key derived from
+`JWT_SECRET` — a database read alone never yields a working second factor —
+and challenges carry `purpose: '2fa'`, which `requireAuth` rejects, so a
+challenge can never pass as a bearer token. Residual gaps, stated plainly:
+2FA is opt-in rather than enforced on staff; there is no per-account attempt
+counter on the verify endpoint beyond the shared auth rate limiter; and
+rotating `JWT_SECRET` invalidates every enrolled secret (re-enrolment
+required — no rotation runbook exists yet).
+
 **Email tokens are single-use, hashed at rest, and time-boxed.** Only
 `sha256(token)` is stored; the plaintext exists solely inside the email link.
 Verification is 24h, reset is 1h, a consumed token cannot be replayed, and
@@ -98,8 +119,12 @@ CSP** so `unsafe-inline` can be dropped from `script-src`.
 
 **b. No second factor on the admin console.** A single password protects
 `/admin/*` — member search, manual USDT approvals, pool settlement recording,
-settings. This is the highest-value target on the platform. At minimum, TOTP
-2FA on ADMIN accounts, enforced server-side, with recovery codes.
+settings. This is the highest-value target on the platform. ~~At minimum, TOTP
+2FA on ADMIN accounts, enforced server-side, with recovery codes.~~
+**Shipped 2026-09-28** (migration `0010`): opt-in TOTP for every account with
+encrypted secrets and single-use backup codes — but enrolment is still the
+member's choice. The remaining step is *enforcing* it on staff accounts
+(SUPERADMIN first) before real money.
 
 **c. No account lockout or credential-stuffing defence.** The auth limiter is
 20 requests / 15 min per IP, which is a speed bump against one IP and nothing
@@ -203,7 +228,8 @@ running process.
 
 ## 5. Launch gate
 
-Do not take real member funds until: (a) admin 2FA, (b) httpOnly cookie auth
+Do not take real member funds until: (a) 2FA *enforced* on staff accounts
+(opt-in TOTP shipped 2026-09-28; enforcement is the remaining step), (b) httpOnly cookie auth
 or at minimum nonce CSP, (c) `trust proxy` configured behind the real proxy,
 (d) SMTP + SPF/DKIM verified end to end, (e) Pay2Crypto merchant token live,
 (f) placeholder broker links replaced, (g) an external pen test done,

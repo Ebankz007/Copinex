@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ActionButton, Field, Note, Panel, PortalPage } from "@/components/portal-ui";
+import { TwoFactorPanel } from "@/components/two-factor-panel";
 import {
   ApiError,
   changePassword,
@@ -196,6 +197,10 @@ export default function ProfilePage() {
             </ActionButton>
           </div>
         </Panel>
+      </div>
+
+      <div className="mt-4">
+        <TwoFactorPanel enabled={user.totpEnabled} onChanged={() => void load()} />
       </div>
 
       <div className="mt-4">

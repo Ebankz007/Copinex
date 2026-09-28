@@ -71,6 +71,13 @@
       "when": 1790486756909,
       "tag": "0009_handy_ogun",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790562855514,
+      "tag": "0010_sleepy_mentallo",
+      "breakpoints": true
     }
   ]
 }

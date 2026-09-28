@@ -15,12 +15,12 @@ only Henry can supply. **Known gap** = deliberately not done; stated plainly.
 | # | Deliverable | Status |
 |---|---|---|
 | 1 | Public marketing site (6 pages, official design) | Complete |
-| 2 | Authentication surface (register → verify → reset → sessions) | Complete |
+| 2 | Authentication surface (register → verify → reset → sessions → 2FA) | Complete |
 | 3 | Member portal (dashboard, wallet, invest, network, profile, notifications) | Complete |
 | 4 | Admin console (8 sections incl. withdrawals, investments, content, settings, audit) | Complete |
-| 5 | Backend API (66 endpoints, permission-gated, audited) | Complete |
-| 6 | Database (27 tables, 9 migrations, DB-enforced money invariants) | Complete |
-| 7 | Test suite (165 passing: 66 engine + 99 API) | Complete |
+| 5 | Backend API (71 endpoints, permission-gated, audited) | Complete |
+| 6 | Database (28 tables, 10 migrations, DB-enforced money invariants) | Complete |
+| 7 | Test suite (186 passing: 66 engine + 120 API) | Complete |
 | 8 | Operations (service supervisor, backup, restore, cleanup) | Complete |
 | 9 | Documentation (README, DEPLOYMENT, API reference, security review) | Complete |
 | 10 | Production launch readiness | Ready, blocked on you |
@@ -52,6 +52,11 @@ Full credential lifecycle, not just a login form:
 - Password reset (1h token) and authenticated password change
 - Device/session list with individual revocation and logout
 - Profile update
+- **TOTP two-factor** (opt-in, profile page): QR enrolment, live-code confirm,
+  ten single-use backup codes, password-gated disable. Enrolled logins return a
+  5-minute challenge, never a session, until the second factor verifies.
+- **15-minute portal idle timeout**: inactivity revokes the session server-side
+  and returns the member to login with an explanation.
 
 Security properties that are tested, not just claimed:
 
@@ -132,13 +137,17 @@ placement, pools, investment accrual, 90-day settlement and reconciliation.
 
 ## 7. Test suite — Complete
 
-**165 passing** — 66 engine (Vitest unit) + 99 API (Supertest integration).
+**186 passing** — 66 engine (Vitest unit) + 120 API (Supertest integration).
 
 New in this pass: `apps/api/tests/auth-security.integration.test.ts` (19 cases)
 covering session revocation on credential change, email-token single-use,
 enumeration resistance, notification fan-out, and the admin content/settings/
 member surfaces. It immediately caught two real defects (below) plus an audit
 bug that had been silently dropping every settings audit row.
+Newest: `apps/api/tests/two-factor.integration.test.ts` (11 cases) covering
+TOTP enrolment, challenge login, backup-code single-use, the challenge-is-not-
+a-session guard, and disable. It caught a real defect too (backup codes minted
+at 6 chars against an 8-char verifier).
 
 ## 8. Operations — Complete
 
@@ -190,11 +199,13 @@ The code is ready. Five things are not mine to do:
 
 ### Recommended before real funds (from `docs/security-review.md`)
 
-Admin 2FA, httpOnly cookie auth (or nonce-based CSP), and `trust proxy` behind
-the real proxy. Also worth stating plainly: **there has been no penetration
-test and no load test.** Everything above is source review plus automated tests.
-An external pen test of the auth, admin and money paths is the single best
-pre-launch spend.
+TOTP 2FA shipped 2026-09-28 (opt-in per account, migration `0010`) plus a
+15-minute portal idle timeout — the remaining step is *enforcing* 2FA on staff
+accounts. Still open: httpOnly cookie auth (or nonce-based CSP), and
+`trust proxy` behind the real proxy. Also worth stating plainly: **there has
+been no penetration test and no load test.** Everything above is source review
+plus automated tests. An external pen test of the auth, admin and money paths
+is the single best pre-launch spend.
 
 ---
 
@@ -202,7 +213,7 @@ pre-launch spend.
 
 ```powershell
 cd C:\BerfamWorks\COPINEX\platform
-pnpm -r test                                          # 165 tests
+pnpm -r test                                          # 186 tests
 pnpm --filter @copinex/engine build
 pnpm --filter @copinex/database build
 pnpm --filter @copinex/api build

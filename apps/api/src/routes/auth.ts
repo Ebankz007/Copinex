@@ -5,10 +5,17 @@ import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
 import { HttpError } from '../lib/http-error.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
-import { signAuthToken } from '../lib/jwt.js';
+import { signAuthToken, signTwoFactorChallenge, verifyTwoFactorChallenge } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/auth.js';
 import { registerMember } from '../services/registration-service.js';
 import { createSession, listSessions, revokeAllSessions, revokeSession } from '../services/sessions.js';
+import {
+  beginSetup,
+  confirmSetup,
+  disableTwoFactor,
+  getTwoFactorState,
+  verifyChallenge,
+} from '../services/two-factor.js';
 import { consumeEmailToken, issueEmailToken } from '../services/email-tokens.js';
 import { createNotification, listNotifications, markAllNotificationsRead, markNotificationRead, unreadCount } from '../services/notifications.js';
 import { sha256 } from '../lib/tokens.js';
@@ -57,6 +64,7 @@ function publicUser(u: typeof schema.users.$inferSelect) {
     membershipActivated: u.membershipActivated,
     activatedAt: u.activatedAt,
     emailVerifiedAt: u.emailVerifiedAt,
+    totpEnabled: u.totpEnabled,
     createdAt: u.createdAt,
   };
 }
@@ -125,6 +133,18 @@ authRouter.post('/login', async (req, res, next) => {
     }
     if (user.status !== 'ACTIVE' || !user.isActive) {
       throw new HttpError(403, 'ACCOUNT_DISABLED', 'This account has been disabled. Contact support.');
+    }
+
+    // Enrolled in 2FA: the password only earns a 5-minute challenge, never a
+    // session. The challenge exchanges for a session at POST /2fa/verify.
+    if (user.totpEnabled) {
+      const challenge = signTwoFactorChallenge(user.id);
+      await db
+        .update(schema.users)
+        .set({ lastActivityAt: new Date() })
+        .where(eq(schema.users.id, user.id));
+      res.json({ requiresTwoFactor: true, challenge });
+      return;
     }
 
     const token = signAuthToken({ sub: user.id, email: user.email, role: user.role });
@@ -295,6 +315,88 @@ authRouter.post('/logout', requireAuth, async (req, res, next) => {
       .limit(1);
     if (session) await revokeSession(req.user!.id, session.id);
     res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Two-factor authentication (TOTP) ───────────────────────
+// Enrolment is two-phase: setup returns the secret for scanning, enable
+// flips the flag only after a live code proves possession. The verify
+// endpoint sits behind the same auth rate limiter as /login.
+
+/** Phase 1: store an unenrolled secret, return it for scanning into an app. */
+authRouter.post('/2fa/setup', requireAuth, async (req, res, next) => {
+  try {
+    const [user] = await db
+      .select({ email: schema.users.email })
+      .from(schema.users)
+      .where(eq(schema.users.id, req.user!.id))
+      .limit(1);
+    if (!user) throw new HttpError(404, 'NOT_FOUND', 'User not found');
+    res.json(await beginSetup(req.user!.id, user.email));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Phase 2: confirm a live code → enable 2FA, receive single-use backup codes. */
+authRouter.post('/2fa/enable', requireAuth, async (req, res, next) => {
+  try {
+    const { token } = z.object({ token: z.string().min(6).max(16) }).parse(req.body);
+    res.json(await confirmSetup(req.user!.id, token));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Redeem a login challenge with a TOTP code or backup code → session. */
+authRouter.post('/2fa/verify', async (req, res, next) => {
+  try {
+    const body = z
+      .object({ challenge: z.string().min(10), token: z.string().min(6).max(16) })
+      .parse(req.body);
+    let sub: string;
+    try {
+      ({ sub } = verifyTwoFactorChallenge(body.challenge));
+    } catch {
+      throw new HttpError(401, 'INVALID_CHALLENGE', 'This verification has expired. Sign in again.');
+    }
+    const result = await verifyChallenge(sub, body.token);
+    if (!result.ok) {
+      throw new HttpError(401, 'INVALID_TWO_FACTOR_CODE', 'That code did not verify. Try again.');
+    }
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, sub)).limit(1);
+    if (!user || user.status !== 'ACTIVE' || !user.isActive) {
+      throw new HttpError(403, 'ACCOUNT_DISABLED', 'This account has been disabled. Contact support.');
+    }
+    const token = signAuthToken({ sub: user.id, email: user.email, role: user.role });
+    await createSession(user.id, token, sessionInfo(req));
+    await db
+      .update(schema.users)
+      .set({ lastActivityAt: new Date() })
+      .where(eq(schema.users.id, user.id));
+    res.json({ token, user: publicUser(user), viaBackupCode: result.viaBackupCode });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** 2FA state for the current member (profile UI). */
+authRouter.get('/2fa/status', requireAuth, async (req, res, next) => {
+  try {
+    res.json(await getTwoFactorState(req.user!.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Disable 2FA after a password re-check; wipes the secret and all codes. */
+authRouter.post('/2fa/disable', requireAuth, async (req, res, next) => {
+  try {
+    const { password } = z.object({ password: z.string().min(1).max(128) }).parse(req.body);
+    await disableTwoFactor(req.user!.id, password);
+    res.json({ disabled: true });
   } catch (e) {
     next(e);
   }
