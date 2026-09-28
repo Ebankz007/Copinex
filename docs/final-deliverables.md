@@ -215,8 +215,8 @@ Seeded accounts (repaired, not skipped, on every `seed-users` run):
 
 | Email | Password | Role |
 |---|---|---|
-| `admin@example.com` | `Admin@12345` | ADMIN |
-| `client@example.com` | `Client@12345` | MEMBER |
+| `admin@copinex.com` | `Admin@12345` | ADMIN |
+| `client@copinex.com` | `Client@12345` | MEMBER |
 
 ## Locked rules — do not change without Henry
 

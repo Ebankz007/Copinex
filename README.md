@@ -110,13 +110,13 @@ passwords to these values and repairs their role/status.
 
 | Email | Password | Role | State |
 |---|---|---|---|
-| `superadmin@example.com` | `SuperAdmin@12345` | SUPERADMIN | activated, all permissions + the sole authority over roles |
-| `admin@example.com` | `Admin@12345` | ADMIN | activated, all permissions except role management |
-| `client@example.com` | `Client@12345` | MEMBER | activated, $500 COPINEX + $120 WITHDRAWAL demo balances |
-| `clienttest@example.com` | `ClientTest@12345` | MEMBER | activated, $250 COPINEX + $50 WITHDRAWAL — a disposable account for exercising member journeys |
+| `superadmin@copinex.com` | `SuperAdmin@12345` | SUPERADMIN | activated, all permissions + the sole authority over roles |
+| `admin@copinex.com` | `Admin@12345` | ADMIN | activated, all permissions except role management |
+| `client@copinex.com` | `Client@12345` | MEMBER | activated, $500 COPINEX + $120 WITHDRAWAL demo balances |
+| `clienttest@copinex.com` | `ClientTest@12345` | MEMBER | activated, $250 COPINEX + $50 WITHDRAWAL — a disposable account for exercising member journeys |
 
 > **These are published dev passwords.** Delete or rotate all four before the
-> platform takes real money, `superadmin@example.com` first.
+> platform takes real money, `superadmin@copinex.com` first.
 
 ### Roles
 

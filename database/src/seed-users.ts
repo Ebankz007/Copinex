@@ -197,7 +197,7 @@ async function main() {
   //    or revoke ADMIN/SUPERADMIN, and the only one that can edit a staff
   //    account. Operationally identical to ADMIN everywhere else.
   await ensureSeedUser({
-    email: 'superadmin@example.com',
+    email: 'superadmin@copinex.com',
     password: 'SuperAdmin@12345',
     fullName: 'Copinex Super Administrator',
     role: 'SUPERADMIN',
@@ -205,7 +205,7 @@ async function main() {
 
   // 2. ADMIN — full operational access, cannot mint another admin.
   await ensureSeedUser({
-    email: 'admin@example.com',
+    email: 'admin@copinex.com',
     password: 'Admin@12345',
     fullName: 'Copinex Administrator',
     role: 'ADMIN',
@@ -213,7 +213,7 @@ async function main() {
 
   // 3. CLIENT — the demo member. Kept for the marketing walkthrough.
   await ensureSeedUser({
-    email: 'client@example.com',
+    email: 'client@copinex.com',
     password: 'Client@12345',
     fullName: 'Demo Client',
     role: 'MEMBER',
@@ -227,7 +227,7 @@ async function main() {
   // 4. CLIENTTEST — a second, disposable member for exercising member journeys
   //    (deposit → invest → withdraw) without disturbing the demo client above.
   await ensureSeedUser({
-    email: 'clienttest@example.com',
+    email: 'clienttest@copinex.com',
     password: 'ClientTest@12345',
     fullName: 'Client Test',
     role: 'MEMBER',
