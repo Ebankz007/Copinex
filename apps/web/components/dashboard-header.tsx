@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronLeftIcon } from "@/components/icons";
 import { fetchMe, isAdminRole, logout, type UserDto } from "@/lib/api";
 
 function initials(name: string | null, email: string): string {
@@ -70,6 +71,15 @@ export function DashboardHeader() {
           <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-green to-teal-2 text-sm font-bold text-night">
             {avatar}
           </div>
+          {/* Back to the public website — the dashboard is the top of the
+              portal, so without this there is no way out except sign-out. */}
+          <Link
+            href="/"
+            className="flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-soft transition hover:bg-white/10"
+          >
+            <ChevronLeftIcon className="h-3.5 w-3.5" />
+            Website
+          </Link>
           {loaded && !user && (
             <Link
               href="/login"
