@@ -215,8 +215,7 @@ describe('Q4 crypto payments — live request contract', () => {
     });
   });
 
-  it('rejects bodies with no payable URL', () => {
-    const err = (body: unknown) => {
+  it('rejects bodies with no payable URL', () => {    const err = (body: unknown) => {
       try {
         parsePaymentRequestResponse(body);
       } catch (e) {
@@ -226,6 +225,73 @@ describe('Q4 crypto payments — live request contract', () => {
     };
     expect(err({ success: true }).code).toBe('PAYMENT_GATEWAY_ERROR');
     expect(err({ success: false, checkout_url: 'https://x' }).code).toBe('PAYMENT_GATEWAY_ERROR');
+  });
+});
+
+describe('Q4 crypto payments — checkout refresh', () => {
+  // The "Open checkout" button calls POST /:id/checkout first so the member
+  // always lands on a live page: gateway links die after 1 hour, and a
+  // stored URL older than the freshness margin is refreshed against the same
+  // row (no duplicate PENDING rows).
+  it('fresh PENDING returns the stored URL without touching the gateway', async () => {
+    const member = await register('co-fresh@test.dev');
+    const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
+    const payment = created.body.payment;
+
+    const res = await request(app).post(`/api/payments/${payment.id}/checkout`).set(auth(member.token)).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.paymentUrl).toBe(payment.paymentUrl);
+    expect(res.body.refreshed).toBe(false);
+  });
+
+  it('stale PENDING issues a new link on the same row', async () => {
+    const member = await register('co-stale@test.dev');
+    const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
+    const payment = created.body.payment;
+    await pool.query(`UPDATE payments SET created_at = now() - interval '2 hours' WHERE id = $1`, [payment.id]);
+
+    const res = await request(app).post(`/api/payments/${payment.id}/checkout`).set(auth(member.token)).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.refreshed).toBe(true);
+    expect(res.body.paymentUrl).toBeTruthy();
+    expect(res.body.paymentUrl).not.toBe(payment.paymentUrl);
+
+    // Same row, rewritten — not forked.
+    const rows = await pool.query('SELECT count(*)::int AS n FROM payments WHERE user_id = $1', [member.user.id]);
+    expect(rows.rows[0].n).toBe(1);
+    const row = await pool.query('SELECT payment_url, payment_ref FROM payments WHERE id = $1', [payment.id]);
+    expect(row.rows[0].payment_url).toBe(res.body.paymentUrl);
+    expect(row.rows[0].payment_ref).not.toBe(payment.paymentRef);
+  });
+
+  it('PAID, foreign, missing, and unauthed checkouts are refused', async () => {
+    const member = await register('co-guard@test.dev');
+    const other = await register('co-other@test.dev');
+    const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
+    const payment = created.body.payment;
+
+    // Foreign member's row → 404 (ownership is part of the lookup).
+    const foreign = await request(app)
+      .post(`/api/payments/${payment.id}/checkout`)
+      .set(auth(other.token))
+      .send({});
+    expect(foreign.status).toBe(404);
+
+    // Unknown id → 404.
+    const missing = await request(app)
+      .post('/api/payments/00000000-0000-0000-0000-000000000000/checkout')
+      .set(auth(member.token))
+      .send({});
+    expect(missing.status).toBe(404);
+
+    // No token → 401.
+    const anon = await request(app).post(`/api/payments/${payment.id}/checkout`).send({});
+    expect(anon.status).toBe(401);
+
+    // Paid out → 400 (nothing to check out).
+    await pool.query(`UPDATE payments SET status = 'PAID' WHERE id = $1`, [payment.id]);
+    const paid = await request(app).post(`/api/payments/${payment.id}/checkout`).set(auth(member.token)).send({});
+    expect(paid.status).toBe(400);
   });
 });
 

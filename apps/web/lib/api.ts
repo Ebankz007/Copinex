@@ -370,6 +370,18 @@ export async function createDepositPayment(amountCents: number): Promise<Payment
   return data.payment;
 }
 
+/**
+ * Fresh checkout URL for a PENDING payment: the stored link when young,
+ * a brand-new gateway request when stale. The checkout button calls this
+ * first so the member always lands on a live Pay2Crypto page.
+ */
+export async function refreshCheckout(paymentId: string): Promise<{ paymentUrl: string; refreshed: boolean }> {
+  return request<{ paymentUrl: string; refreshed: boolean }>(`/payments/${paymentId}/checkout`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 /** Request a withdrawal: funds are held, admin approves or rejects. */
 export async function submitWithdrawal(
   walletType: "COPINEX" | "WITHDRAWAL",

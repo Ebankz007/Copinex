@@ -115,6 +115,7 @@ POST in the platform and is secret-gated instead.
 |---|---|---|
 | POST | `/api/payments/activate` | One-time $50 activation (guarded by `requireUnactivated`). |
 | POST | `/api/payments/deposit` | Creates a crypto invoice. |
+| POST | `/api/payments/:id/checkout` | Fresh checkout URL for a PENDING payment (owner only): the stored link when younger than the 50-min freshness margin, otherwise a new gateway request written back onto the same row. Non-pending → 400, foreign/missing → 404. The checkout button calls this before redirecting — gateway links expire after 1 hour. |
 | GET | `/api/payments` | The member's payment history. |
 | POST | `/api/webhooks/pay2crypto` | Provider callback. Secret-gated via `x-pay2crypto-secret` header or `?secret=`; idempotent; ref/amount verified. |
 

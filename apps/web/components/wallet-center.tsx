@@ -12,6 +12,7 @@ import {
   fetchMyWithdrawals,
   fetchWalletBalances,
   isDemoMode,
+  refreshCheckout,
   submitWithdrawal,
   type LedgerEntryDto,
   type PaymentDto,
@@ -114,9 +115,9 @@ export function WalletCenter({ initialTab }: { initialTab: Tab }) {
     try {
       const payment = await createActivationPayment();
       await reload();
-      setTab(null);
-      setSuccess("Activation invoice created — complete the payment to unlock your membership.");
-      if (payment.paymentUrl) window.open(payment.paymentUrl, "_blank", "noopener");
+      // Same-tab redirect: popup blockers eat window.open, and the member
+      // should land on the live checkout page, not a new tab they lose.
+      if (payment.paymentUrl) window.location.assign(payment.paymentUrl);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not create activation invoice");
     } finally {
@@ -137,11 +138,25 @@ export function WalletCenter({ initialTab }: { initialTab: Tab }) {
     try {
       const payment = await createDepositPayment(amountCents);
       await reload();
-      setTab(null);
-      setSuccess("Deposit invoice created — funds settle to your COPINEX wallet once confirmed.");
-      if (payment.paymentUrl) window.open(payment.paymentUrl, "_blank", "noopener");
+      if (payment.paymentUrl) window.location.assign(payment.paymentUrl);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not create deposit invoice");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCheckout() {
+    if (!pendingPayment) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Re-call the API first: the stored link dies after the gateway's
+      // 1-hour expiry, so the button always lands on a LIVE checkout page.
+      const { paymentUrl } = await refreshCheckout(pendingPayment.id);
+      window.location.assign(paymentUrl);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not open checkout. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -369,15 +384,14 @@ export function WalletCenter({ initialTab }: { initialTab: Tab }) {
             is pending on-chain confirmation. This page updates automatically once it clears.
           </p>
           {pendingPayment.paymentUrl && (
-            <a
-              href={pendingPayment.paymentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-1.5 rounded-2xl bg-green px-4 py-2.5 text-xs font-bold text-night transition hover:brightness-110"
+            <button
+              onClick={handleCheckout}
+              disabled={busy}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-2xl bg-green px-4 py-2.5 text-xs font-bold text-night transition hover:brightness-110 disabled:opacity-40"
             >
               <ExternalLinkIcon className="h-3.5 w-3.5" />
-              Open checkout
-            </a>
+              {busy ? "Opening checkout…" : "Open checkout"}
+            </button>
           )}
         </section>
       )}

@@ -5,7 +5,7 @@ import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
 import { HttpError } from '../lib/http-error.js';
 import { requireActivated, requireAuth, requireUnactivated } from '../middleware/auth.js';
-import { createPayment, listMyPayments } from '../services/payment-service.js';
+import { createPayment, listMyPayments, refreshCheckoutUrl } from '../services/payment-service.js';
 
 export const paymentsRouter = Router();
 
@@ -62,6 +62,21 @@ paymentsRouter.get('/', async (req, res, next) => {
   try {
     const payments = await listMyPayments(req.user!.id);
     res.json({ payments });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Fresh checkout URL for a PENDING payment. Returns the stored URL when it
+ * is younger than the gateway expiry margin, otherwise issues a new gateway
+ * request against the same row. The checkout button calls this first so the
+ * member never lands on a dead (1-hour-expired) link.
+ */
+paymentsRouter.post('/:id/checkout', async (req, res, next) => {
+  try {
+    const id = z.string().uuid().parse(req.params.id);
+    res.json(await refreshCheckoutUrl(req.user!.id, id));
   } catch (e) {
     next(e);
   }

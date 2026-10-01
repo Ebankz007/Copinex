@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import * as schema from '@copinex/database';
 import { db } from '../db/drizzle.js';
@@ -95,41 +95,11 @@ export async function createPayment(userId: string, purpose: PaymentPurpose, amo
   }
 
   const paymentRef = `COP-${randomUUID()}`;
-
-  let gatewayTxid: string | null = null;
-  let paymentUrl: string;
-
-  if (isMockMode()) {
-    gatewayTxid = `mock-${randomUUID()}`;
-    paymentUrl = `https://checkout.pay2crypto.com/?txid=${gatewayTxid}&mock=1`;
-  } else {
-    const body = buildPaymentRequestBody({
-      paymentRef,
-      amountCents: cents as number,
-      purpose,
-      returnUrl: `${env.APP_URL}/wallet`,
-    });
-    const res = await fetch(`${env.PAY2CRYPTO_API_URL}/v1/payment-requests`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.PAY2CRYPTO_TOKEN}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new HttpError(
-        502,
-        'PAYMENT_GATEWAY_ERROR',
-        `Pay2Crypto payment request failed: ${res.status} ${text.slice(0, 200)}`,
-      );
-    }
-    // Shape verified live against the sandbox (see parsePaymentRequestResponse).
-    const parsed = parsePaymentRequestResponse(await res.json());
-    gatewayTxid = parsed.gatewayTxid;
-    paymentUrl = parsed.paymentUrl;
-  }
+  const { gatewayTxid, paymentUrl } = await requestGatewayCheckout({
+    paymentRef,
+    amountCents: cents as number,
+    purpose,
+  });
 
   const [payment] = await db
     .insert(schema.payments)
@@ -144,6 +114,89 @@ export async function createPayment(userId: string, purpose: PaymentPurpose, amo
     })
     .returning();
   return payment;
+}
+
+/**
+ * Call Pay2Crypto (or mock) for a checkout URL without touching the ledger.
+ * Shared by creation and by checkout refresh so both paths speak the exact
+ * same contract.
+ */
+async function requestGatewayCheckout(input: {
+  paymentRef: string;
+  amountCents: number;
+  purpose: PaymentPurpose;
+}): Promise<{ gatewayTxid: string | null; paymentUrl: string }> {
+  if (isMockMode()) {
+    const gatewayTxid = `mock-${randomUUID()}`;
+    return { gatewayTxid, paymentUrl: `https://checkout.pay2crypto.com/?txid=${gatewayTxid}&mock=1` };
+  }
+  const body = buildPaymentRequestBody({
+    paymentRef: input.paymentRef,
+    amountCents: input.amountCents,
+    purpose: input.purpose,
+    returnUrl: `${env.APP_URL}/wallet`,
+  });
+  const res = await fetch(`${env.PAY2CRYPTO_API_URL}/v1/payment-requests`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.PAY2CRYPTO_TOKEN}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new HttpError(
+      502,
+      'PAYMENT_GATEWAY_ERROR',
+      `Pay2Crypto payment request failed: ${res.status} ${text.slice(0, 200)}`,
+    );
+  }
+  // Shape verified live against the sandbox (see parsePaymentRequestResponse).
+  const parsed = parsePaymentRequestResponse(await res.json());
+  return { gatewayTxid: parsed.gatewayTxid, paymentUrl: parsed.paymentUrl };
+}
+
+/**
+ * Checkout refresh: the button behind "Open checkout" calls the API first so
+ * the member always lands on a LIVE checkout_url, never a stale stored one.
+ *
+ * Pay2Crypto requests expire after 1 hour, so a stored URL older than
+ * CHECKOUT_FRESH_MINUTES is dead. A refresh issues a brand-new gateway
+ * request (new reference — the old one expired server-side too) and updates
+ * the SAME row: no duplicate PENDING rows, and the webhook join key stays
+ * consistent because the row it joins on is rewritten, not forked.
+ */
+export const CHECKOUT_FRESH_MINUTES = 50;
+
+export async function refreshCheckoutUrl(
+  userId: string,
+  paymentId: string,
+): Promise<{ paymentUrl: string; refreshed: boolean }> {
+  const [payment] = await db
+    .select()
+    .from(schema.payments)
+    .where(and(eq(schema.payments.id, paymentId), eq(schema.payments.userId, userId)))
+    .limit(1);
+  if (!payment) throw new HttpError(404, 'NOT_FOUND', 'Payment not found');
+  if (payment.status !== 'PENDING') {
+    throw new HttpError(400, 'PAYMENT_NOT_PENDING', 'Only a pending payment can be checked out');
+  }
+  const ageMs = Date.now() - new Date(payment.createdAt).getTime();
+  if (payment.paymentUrl && ageMs < CHECKOUT_FRESH_MINUTES * 60_000) {
+    return { paymentUrl: payment.paymentUrl, refreshed: false };
+  }
+  const paymentRef = `COP-${randomUUID()}`;
+  const { gatewayTxid, paymentUrl } = await requestGatewayCheckout({
+    paymentRef,
+    amountCents: payment.amountCents,
+    purpose: payment.purpose as PaymentPurpose,
+  });
+  await db
+    .update(schema.payments)
+    .set({ paymentRef, gatewayTxid, paymentUrl })
+    .where(eq(schema.payments.id, payment.id));
+  return { paymentUrl, refreshed: true };
 }
 
 /** The member's own payment history, newest first. */
