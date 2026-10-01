@@ -24,6 +24,41 @@ function isMockMode(): boolean {
  * Mock mode (no credentials configured) returns a synthetic checkout URL so
  * the full flow is testable before the merchant token exists.
  */
+export interface Pay2CryptoRequestBody {
+  amount: string;
+  asset: 'USDT';
+  network: 'trc20';
+  reference: string;
+  description: string;
+  return_url: string;
+}
+
+/**
+ * The exact POST /v1/payment-requests contract (pinned 2026-09-28 from the
+ * merchant integration snippet — amount is a 2-decimal STRING, not a number).
+ * Pure function so the contract is unit-pinned without touching the network.
+ */
+export function buildPaymentRequestBody(input: {
+  paymentRef: string;
+  amountCents: number;
+  purpose: PaymentPurpose;
+  returnUrl: string;
+}): Pay2CryptoRequestBody {
+  const dollars = (input.amountCents / 100).toFixed(2);
+  const description =
+    input.purpose === 'ACTIVATION'
+      ? `Copinex membership activation — $${dollars}`
+      : `Copinex wallet deposit — $${dollars}`;
+  return {
+    amount: dollars,
+    asset: 'USDT',
+    network: 'trc20',
+    reference: input.paymentRef,
+    description,
+    return_url: input.returnUrl,
+  };
+}
+
 export async function createPayment(userId: string, purpose: PaymentPurpose, amountCents?: number) {
   const cents = purpose === 'ACTIVATION' ? ACTIVATION_FEE_CENTS : amountCents;
   if (purpose === 'DEPOSIT' && (!Number.isInteger(cents) || (cents as number) <= 0 || (cents as number) > MAX_PAYMENT_CENTS)) {
@@ -31,7 +66,6 @@ export async function createPayment(userId: string, purpose: PaymentPurpose, amo
   }
 
   const paymentRef = `COP-${randomUUID()}`;
-  const amountUsd = (cents as number) / 100;
 
   let gatewayTxid: string | null = null;
   let paymentUrl: string;
@@ -40,39 +74,46 @@ export async function createPayment(userId: string, purpose: PaymentPurpose, amo
     gatewayTxid = `mock-${randomUUID()}`;
     paymentUrl = `https://checkout.pay2crypto.com/?txid=${gatewayTxid}&mock=1`;
   } else {
-    const res = await fetch(`${env.PAY2CRYPTO_API_URL}/v1/invoices/create`, {
+    const body = buildPaymentRequestBody({
+      paymentRef,
+      amountCents: cents as number,
+      purpose,
+      returnUrl: `${env.APP_URL}/wallet`,
+    });
+    const res = await fetch(`${env.PAY2CRYPTO_API_URL}/v1/payment-requests`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${env.PAY2CRYPTO_TOKEN}`,
       },
-      body: JSON.stringify({
-        payment_ref: paymentRef,
-        payment_type: 1,
-        payment_network: 2, // Tron / TRC20
-        payment_amount: amountUsd,
-        order_id: paymentRef,
-        customer_id: userId,
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const body = await res.text();
+      const text = await res.text();
       throw new HttpError(
         502,
         'PAYMENT_GATEWAY_ERROR',
-        `Pay2Crypto invoice failed: ${res.status} ${body.slice(0, 200)}`,
+        `Pay2Crypto payment request failed: ${res.status} ${text.slice(0, 200)}`,
       );
     }
-    const data = (await res.json()) as {
-      success?: boolean;
-      payment_url?: string;
-      txid?: string;
-    };
-    if (!data.success || !data.payment_url) {
-      throw new HttpError(502, 'PAYMENT_GATEWAY_ERROR', 'Pay2Crypto returned an invalid invoice response');
+    // Defensive parse: the documented invoice response carries payment_url +
+    // txid/unique_id, but accept the neighbouring field names rather than
+    // 500 on a rename.
+    const data = (await res.json()) as Record<string, unknown>;
+    const url =
+      typeof data.payment_url === 'string'
+        ? data.payment_url
+        : typeof data.checkout_url === 'string'
+          ? data.checkout_url
+          : typeof data.url === 'string'
+            ? data.url
+            : null;
+    if (data.success === false || !url) {
+      throw new HttpError(502, 'PAYMENT_GATEWAY_ERROR', 'Pay2Crypto returned an invalid payment-request response');
     }
-    gatewayTxid = data.txid ?? null;
-    paymentUrl = data.payment_url;
+    const txid = [data.txid, data.unique_id, data.id].find((v) => typeof v === 'string') as string | undefined;
+    gatewayTxid = txid ?? null;
+    paymentUrl = url;
   }
 
   const [payment] = await db

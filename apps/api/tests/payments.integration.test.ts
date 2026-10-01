@@ -11,6 +11,7 @@ import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
 import { loginWithEnrollment } from './helpers.js';
+import { buildPaymentRequestBody } from '../src/services/payment-service.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -146,6 +147,43 @@ describe('Q4 crypto payments â€” invoices', () => {
     expect(res.status).toBe(200);
     expect(res.body.payments).toHaveLength(1);
     expect(res.body.payments[0].purpose).toBe('ACTIVATION');
+  });
+});
+
+describe('Q4 crypto payments — live request contract', () => {
+  // Pins the exact POST /v1/payment-requests body from the merchant
+  // integration snippet (2026-09-28): amount is a 2-decimal STRING, asset
+  // USDT, network trc20. If Pay2Crypto renames a field, this fails first —
+  // not a live member's checkout.
+  it('builds the ACTIVATION body ($50.00 as a string)', () => {
+    expect(
+      buildPaymentRequestBody({
+        paymentRef: 'COP-abc',
+        amountCents: 5000,
+        purpose: 'ACTIVATION',
+        returnUrl: 'http://localhost:3000/wallet',
+      }),
+    ).toEqual({
+      amount: '50.00',
+      asset: 'USDT',
+      network: 'trc20',
+      reference: 'COP-abc',
+      description: 'Copinex membership activation — $50.00',
+      return_url: 'http://localhost:3000/wallet',
+    });
+  });
+
+  it('builds the DEPOSIT body with exact cent formatting', () => {
+    const body = buildPaymentRequestBody({
+      paymentRef: 'COP-xyz',
+      amountCents: 4999,
+      purpose: 'DEPOSIT',
+      returnUrl: 'http://localhost:3000/wallet',
+    });
+    expect(body.amount).toBe('49.99');
+    expect(body.asset).toBe('USDT');
+    expect(body.network).toBe('trc20');
+    expect(body.description).toBe('Copinex wallet deposit — $49.99');
   });
 });
 
