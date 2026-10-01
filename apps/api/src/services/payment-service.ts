@@ -16,7 +16,10 @@ const PURPOSES = ['ACTIVATION', 'DEPOSIT'] as const;
 export type PaymentPurpose = (typeof PURPOSES)[number];
 
 function isMockMode(): boolean {
-  return !env.PAY2CRYPTO_API_URL || !env.PAY2CRYPTO_TOKEN;
+  // The test suite NEVER touches the live rail, regardless of what sits in
+  // .env — vitest forces NODE_ENV=test, and a suite that mints real gateway
+  // requests would be slow, flaky, and pollute the merchant account.
+  return env.NODE_ENV === 'test' || !env.PAY2CRYPTO_API_URL || !env.PAY2CRYPTO_TOKEN;
 }
 
 /**
