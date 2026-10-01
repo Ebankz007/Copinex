@@ -34,6 +34,35 @@ export interface Pay2CryptoRequestBody {
 }
 
 /**
+ * Parse a POST /v1/payment-requests success body. Shape verified live against
+ * the sandbox 2026-10-01 (status 201): the checkout link is `checkout_url`
+ * and the gateway-side id is `token`. Neighbouring names are accepted so a
+ * rename fails loudly here (502) rather than storing a row with no way to
+ * pay. Pure function — unit-pinned against the real payload shape.
+ */
+export function parsePaymentRequestResponse(data: unknown): {
+  paymentUrl: string;
+  gatewayTxid: string | null;
+} {
+  const body = (data ?? {}) as Record<string, unknown>;
+  const url =
+    typeof body.checkout_url === 'string'
+      ? body.checkout_url
+      : typeof body.payment_url === 'string'
+        ? body.payment_url
+        : typeof body.url === 'string'
+          ? body.url
+          : null;
+  if (body.success === false || !url) {
+    throw new HttpError(502, 'PAYMENT_GATEWAY_ERROR', 'Pay2Crypto returned an invalid payment-request response');
+  }
+  const txid = [body.token, body.txid, body.unique_id, body.id].find((v) => typeof v === 'string') as
+    | string
+    | undefined;
+  return { paymentUrl: url, gatewayTxid: txid ?? null };
+}
+
+/**
  * The exact POST /v1/payment-requests contract (pinned 2026-09-28 from the
  * merchant integration snippet — amount is a 2-decimal STRING, not a number).
  * Pure function so the contract is unit-pinned without touching the network.
@@ -96,24 +125,10 @@ export async function createPayment(userId: string, purpose: PaymentPurpose, amo
         `Pay2Crypto payment request failed: ${res.status} ${text.slice(0, 200)}`,
       );
     }
-    // Defensive parse: the documented invoice response carries payment_url +
-    // txid/unique_id, but accept the neighbouring field names rather than
-    // 500 on a rename.
-    const data = (await res.json()) as Record<string, unknown>;
-    const url =
-      typeof data.payment_url === 'string'
-        ? data.payment_url
-        : typeof data.checkout_url === 'string'
-          ? data.checkout_url
-          : typeof data.url === 'string'
-            ? data.url
-            : null;
-    if (data.success === false || !url) {
-      throw new HttpError(502, 'PAYMENT_GATEWAY_ERROR', 'Pay2Crypto returned an invalid payment-request response');
-    }
-    const txid = [data.txid, data.unique_id, data.id].find((v) => typeof v === 'string') as string | undefined;
-    gatewayTxid = txid ?? null;
-    paymentUrl = url;
+    // Shape verified live against the sandbox (see parsePaymentRequestResponse).
+    const parsed = parsePaymentRequestResponse(await res.json());
+    gatewayTxid = parsed.gatewayTxid;
+    paymentUrl = parsed.paymentUrl;
   }
 
   const [payment] = await db
@@ -167,10 +182,20 @@ export async function handlePaymentWebhook(payload: unknown) {
 
   if (payment.status === 'PAID') return { applied: false, reason: 'already paid' };
 
-  // Amount verification when the gateway echoes it back.
-  if (typeof body.payment_amount === 'number') {
+  // Amount verification when the gateway echoes it back. The sandbox echoes
+  // a STRING ("1" for a $1 request), so accept numeric strings too — a
+  // type-narrow check here would silently skip verification entirely.
+  const echoed =
+    typeof body.payment_amount === 'number'
+      ? body.payment_amount
+      : typeof body.payment_amount === 'string'
+        ? Number(body.payment_amount)
+        : NaN;
+  if (Number.isFinite(echoed)) {
     const expected = payment.amountCents / 100;
-    if (Math.abs(body.payment_amount - expected) > 0.01) {
+    // Half-cent tolerance: float representation noise is ~1e-9, so anything
+    // at or above this is a real discrepancy, not dust.
+    if (Math.abs((echoed as number) - expected) >= 0.005) {
       throw new HttpError(400, 'AMOUNT_MISMATCH', `Payment amount ${body.payment_amount} != expected ${expected}`);
     }
   }

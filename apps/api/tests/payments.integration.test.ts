@@ -11,7 +11,7 @@ import request from 'supertest';
 import { Pool } from 'pg';
 import { createApp } from '../src/app.js';
 import { loginWithEnrollment } from './helpers.js';
-import { buildPaymentRequestBody } from '../src/services/payment-service.js';
+import { buildPaymentRequestBody, parsePaymentRequestResponse } from '../src/services/payment-service.js';
 
 const app = createApp();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
@@ -185,6 +185,48 @@ describe('Q4 crypto payments — live request contract', () => {
     expect(body.network).toBe('trc20');
     expect(body.description).toBe('Copinex wallet deposit — $49.99');
   });
+
+  it('parses the real sandbox success body (verified live 2026-10-01)', () => {
+    // Shape captured from a live 201 against the test key — gateway id is
+    // `token`, the checkout link is `checkout_url`, amounts echo as strings.
+    // Values below are redacted stand-ins; the SHAPE is the assertion.
+    expect(
+      parsePaymentRequestResponse({
+        token: 'aa11bb22cc33',
+        status: 'pending',
+        settlement: null,
+        amount: '1',
+        asset: 'USDT',
+        network: 'trc20',
+        network_mode: 'fixed',
+        mode: 'test',
+        pay_address: 'TXXXredacted',
+        reference: 'COP-CONTRACT-TEST-002',
+        description: 'Copinex contract verification (test, unpaid)',
+        checkout_url: 'https://checkout.pay2crypto.com/aa11bb22cc33',
+        submitted_hash: null,
+        expires_at: '2026-10-01T20:22:21+00:00',
+        created_at: '2026-10-01T19:22:21+00:00',
+        paid_at: null,
+      }),
+    ).toEqual({
+      paymentUrl: 'https://checkout.pay2crypto.com/aa11bb22cc33',
+      gatewayTxid: 'aa11bb22cc33',
+    });
+  });
+
+  it('rejects bodies with no payable URL', () => {
+    const err = (body: unknown) => {
+      try {
+        parsePaymentRequestResponse(body);
+      } catch (e) {
+        return e as { code?: string };
+      }
+      throw new Error('did not throw');
+    };
+    expect(err({ success: true }).code).toBe('PAYMENT_GATEWAY_ERROR');
+    expect(err({ success: false, checkout_url: 'https://x' }).code).toBe('PAYMENT_GATEWAY_ERROR');
+  });
 });
 
 describe('Q4 crypto payments â€” webhook', () => {
@@ -290,6 +332,31 @@ describe('Q4 crypto payments â€” webhook', () => {
 
     const payment = await pool.query('SELECT status FROM payments WHERE payment_ref = $1', [paymentRef]);
     expect(payment.rows[0].status).toBe('PENDING');
+  });
+
+  it('string amounts verify like numbers (sandbox echoes "50", not 50)', async () => {
+    const member = await register('web-str@test.dev');
+    const created = await request(app).post('/api/payments/activate').set(auth(member.token)).send({});
+    const paymentRef = created.body.payment.paymentRef as string;
+
+    // Correct string amount applies.
+    const good = await request(app)
+      .post('/api/webhooks/pay2crypto')
+      .set(webhook({}))
+      .send({ payment_ref: paymentRef, payment_amount: '50', status: 'confirmed' });
+    expect(good.status).toBe(200);
+    expect(good.body.applied).toBe(true);
+
+    // Wrong string amount is rejected, nothing applied.
+    const member2 = await register('web-str2@test.dev');
+    const created2 = await request(app).post('/api/payments/activate').set(auth(member2.token)).send({});
+    const ref2 = created2.body.payment.paymentRef as string;
+    const bad = await request(app)
+      .post('/api/webhooks/pay2crypto')
+      .set(webhook({}))
+      .send({ payment_ref: ref2, payment_amount: '49.99', status: 'confirmed' });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe('AMOUNT_MISMATCH');
   });
 });
 
