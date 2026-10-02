@@ -14,7 +14,15 @@ let transporter: Transporter | null = null;
 
 function getTransporter(): Transporter | null {
   if (!env.SMTP_URL) return null;
-  if (!transporter) transporter = nodemailer.createTransport(env.SMTP_URL);
+  if (!transporter) {
+    transporter = nodemailer.createTransport(env.SMTP_URL);
+    // The pool emits async 'error' events (dropped connections) that would
+    // otherwise crash the process as unhandled. Log them; sendMail/verify
+    // still report failures through their own rejections.
+    transporter.on('error', (err) => {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'SMTP pool error');
+    });
+  }
   return transporter;
 }
 
@@ -36,12 +44,28 @@ export async function sendEmail(msg: EmailMessage): Promise<{ dev: boolean; body
   }
   await t.sendMail({
     from: env.EMAIL_FROM,
+    ...(env.EMAIL_REPLY_TO ? { replyTo: env.EMAIL_REPLY_TO } : {}),
     to: msg.to,
     subject: msg.subject,
     text: msg.text,
     html: msg.html,
   });
   return { dev: false, body: msg.html ?? msg.text };
+}
+
+/**
+ * Boot-time SMTP check (production only): connect + authenticate BEFORE the
+ * API accepts traffic, so a bad password or unreachable host is a loud crash
+ * at deploy time, not a silent reset-email black hole discovered by the
+ * first locked-out member. Returns true when there is nothing to check
+ * (no SMTP_URL — the production env guard already refuses that case).
+ */
+export async function verifySmtpConnection(): Promise<boolean> {
+  const t = getTransporter();
+  if (!t) return true;
+  await t.verify();
+  logger.info('SMTP connection verified');
+  return true;
 }
 
 /** Build an absolute link to the web app (verification, reset, etc.). */

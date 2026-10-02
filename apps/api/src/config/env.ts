@@ -25,8 +25,19 @@ const envSchema = z.object({
   // Outbound email. Unset = dev transport: emails are logged to the console
   // and (development only) the API response carries the link so the full flow
   // is testable without a mail server. Set SMTP_URL for real delivery.
-  SMTP_URL: z.string().optional(),
+  // URL form carries everything: smtps://user:password@host:465 (implicit
+  // TLS) or smtp://user:password@host:587 (STARTTLS). The scheme is
+  // validated — a bare hostname here would fail silently at send time.
+  SMTP_URL: z
+    .string()
+    .refine((v) => v.startsWith('smtp://') || v.startsWith('smtps://'), {
+      message: 'SMTP_URL must start with smtp:// or smtps://',
+    })
+    .optional(),
   EMAIL_FROM: z.string().email().default('no-reply@copinex.com'),
+  // Optional reply-to (support inbox). Unset = recipients reply to the from
+  // address, which for a no-reply sender means replies bounce.
+  EMAIL_REPLY_TO: z.string().email().optional(),
   // Behind a reverse proxy (TLS terminates upstream), req.ip resolves to the
   // proxy unless Express trusts it — which collapses every member into one
   // rate-limit bucket and logs the proxy IP on every audit row. Set
@@ -78,6 +89,17 @@ if (env.NODE_ENV === 'production') {
     console.error(
       '❌ Refusing to boot in production without the Pay2Crypto rail configured',
       '(PAY2CRYPTO_API_URL + PAY2CRYPTO_TOKEN). Mock mode is for development only.',
+    );
+    process.exit(1);
+  }
+  // Password reset and address verification are unusable without a real
+  // delivery path — a platform that silently drops reset emails is worse
+  // than one that will not boot.
+  if (!env.SMTP_URL) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '❌ Refusing to boot in production without SMTP_URL.',
+      'Format: smtps://user:password@host:465 (password percent-encoded).',
     );
     process.exit(1);
   }
