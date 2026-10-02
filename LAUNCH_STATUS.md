@@ -6,7 +6,7 @@ evidence. Secrets never appear in this file.
 
 | # | Item | Status | Evidence / next action |
 |---|---|---|---|
-| 1 | SMTP + SPF/DKIM | **BLOCKED — needs Henry** (code complete, untestable without provider) | SMTP_URL scheme validation, EMAIL_REPLY_TO, production boot requirement, boot-time SMTP verify — all implemented. Needs: provider credentials + DNS records (see below). |
+| 1 | SMTP + SPF/DKIM | Provider SELECTED (SMTP.com); **BLOCKED — needs Henry** (credentials + DNS + live delivery test) | SMTP_URL scheme validation, EMAIL_REPLY_TO, production boot requirement, boot-time SMTP verify, `smtp-verify` script, transport tests — all implemented. Needs: SMTP.com sender credentials + DNS records (see below). |
 | 2 | Live Pay2Crypto key + micro-charge | Not started | Test rail verified live; awaiting live key + explicit charge approval. |
 | 3 | Rotate published dev passwords | Not started | Superadmin first, then the other three. |
 | 4 | Real broker PAMM links | Not started | Awaiting real URLs from Henry — will not invent. |
@@ -15,7 +15,21 @@ evidence. Secrets never appear in this file.
 | 7 | Phase 2 wipe + rehearsal | Not started | After 1–6. Needs explicit confirmation per step. |
 | 8 | Pen test + load test | Not started | Final gate. No destructive prod tests without approval. |
 
-## Item 1 — detail (2026-10-01)
+## Item 1 — detail (2026-10-01, provider selected: SMTP.com)
+
+**Why SMTP.com over Bird:** the app sends via nodemailer over SMTP_URL, so
+SMTP.com (`send.smtp.com`, sender login/password, STARTTLS 2525 or SMTPS
+465) drops in with ZERO code changes — the existing validation, boot
+verification, and dev fallback all apply unchanged. Bird is API-only (no
+SMTP relay in current docs): adopting it would mean rewriting the transport
+to REST with 202-accepted async semantics, new failure modes, and new
+secrets — complexity with no payoff at our volume (resets + verifications +
+announcements; SMTP.com entry is 50k/mo for $25). Bird's strengths
+(multichannel, sandbox, analytics) match no current requirement. Sources:
+https://bird.com/docs/get-started/send-your-first-email,
+https://bird.com/docs/guides/email/sending-domains,
+https://www.smtp.com/resources/api-documentation/ (API v4, Bearer auth),
+https://www.smtp.com/pricing/.
 
 **Implemented (verified by typecheck + suite, commit pending):**
 - `SMTP_URL` must start with `smtp://` or `smtps://` (else env parse fails at boot).
@@ -27,12 +41,17 @@ evidence. Secrets never appear in this file.
 - `.env.production.example` + `DEPLOYMENT.md` checklist updated.
 
 **External dependencies (Henry):**
-1. A mailbox provider account + SMTP credentials (host, port, username,
-   password, TLS mode), installed server-side in the production `.env` —
-   NOT in chat.
-2. DNS records at the sending domain (exact values come from the provider):
+1. An SMTP.com account + SENDER credentials (dashboard → sender login +
+   password — NOT the account login). Install server-side in the production
+   `.env` as `SMTP_URL` — NOT in chat (no secure secret mechanism exists
+   yet; the server `.env`, never committed, is the store). Test any time
+   with `pnpm --filter @copinex/api smtp-verify` (prints host/port only).
+2. DNS records at the sending domain (exact values issued per-domain in the
+   SMTP.com dashboard — cannot be invented here):
    - `TXT` SPF record including the sending host.
-   - `TXT` DKIM record (selector + value supplied by the provider).
+   - `TXT` DKIM record (selector + value from the dashboard).
+   - `TXT` DMARC policy (`v=DMARC1; p=none` minimum, on the sending domain
+     or the organizational domain).
 3. A live delivery test (password-reset to a real mailbox, SPF/DKIM pass in
    headers) once 1–2 are in place.
 

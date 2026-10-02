@@ -17,15 +17,21 @@ going live with real money and real members.
       Run `pnpm --filter @copinex/database migrate` against it, then
       `pnpm --filter @copinex/database seed-users` (idempotent, and it repairs
       the two fixture accounts' credentials rather than skipping them).
-- [ ] **Transactional email (SMTP)** - set `SMTP_URL` (`smtps://user:pass@host:465`,
-      percent-encode a password containing `@` or `/`), `EMAIL_FROM` (a sender on a
-      domain with SPF/DKIM), `EMAIL_REPLY_TO` (a monitored support inbox — unset
-      means replies to a no-reply sender bounce) and `APP_URL`
-      (`https://www.copinex.com`, no trailing slash). The API **refuses to boot
-      in production without `SMTP_URL`** and verifies the connection
-      (connect + auth) before accepting traffic. DNS: SPF include for the
-      sending host plus the provider's DKIM record (selector/value come from
-      the mail provider — see LAUNCH_STATUS.md Item 1). Verify by requesting a
+- [ ] **Transactional email (SMTP.com)** - provider selected 2026-10-01 (see
+      LAUNCH_STATUS.md Item 1 for the Bird comparison). Set `SMTP_URL` with the
+      SENDER login + password from the SMTP.com dashboard
+      (`smtp://LOGIN:PASS@send.smtp.com:2525` STARTTLS, or
+      `smtps://LOGIN:PASS@send.smtp.com:465`; percent-encode `@ / : ?` in the
+      password), `EMAIL_FROM` (a sender on a domain with SPF/DKIM),
+      `EMAIL_REPLY_TO` (a monitored support inbox — unset means replies to a
+      no-reply sender bounce) and `APP_URL` (`https://www.copinex.com`, no
+      trailing slash). The API **refuses to boot in production without
+      `SMTP_URL`** and verifies the connection (connect + auth) before
+      accepting traffic — test credentials any time with
+      `pnpm --filter @copinex/api smtp-verify` (prints host/port only, never
+      the password). DNS: SPF include for the sending host plus the DKIM
+      record from the SMTP.com dashboard (exact selector/value are issued
+      per-domain — see LAUNCH_STATUS.md Item 1). Verify by requesting a
       reset for a real mailbox and confirming delivery + SPF/DKIM pass.
 - [ ] **Real broker PAMM links** - replace the placeholder broker links in
       the `brokers` table (admin UI or SQL) before members see them.
