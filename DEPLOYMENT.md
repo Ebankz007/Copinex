@@ -17,12 +17,17 @@ going live with real money and real members.
       Run `pnpm --filter @copinex/database migrate` against it, then
       `pnpm --filter @copinex/database seed-users` (idempotent, and it repairs
       the two fixture accounts' credentials rather than skipping them).
-- [ ] **Transactional email (SMTP.com)** - provider selected 2026-10-01 (see
-      LAUNCH_STATUS.md Item 1 for the Bird comparison). Set `SMTP_URL` with the
-      SENDER login + password from the SMTP.com dashboard
+- [ ] **Transactional email (SMTP)** - two approved providers, either works
+      with zero code changes (plain SMTP via `SMTP_URL`):
+      **A. SMTP.com** — SENDER login + password from the SMTP.com dashboard
       (`smtp://LOGIN:PASS@send.smtp.com:2525` STARTTLS, or
-      `smtps://LOGIN:PASS@send.smtp.com:465`; percent-encode `@ / : ?` in the
-      password), `EMAIL_FROM` (a sender on a domain with SPF/DKIM),
+      `smtps://LOGIN:PASS@send.smtp.com:465`); **B. Mailgun** — per-domain
+      SMTP login (default `postmaster@<domain>`) + auto-generated password
+      from Sending → Domain Settings → SMTP Credentials
+      (`smtp://postmaster@mail.copinex.com:PASS@smtp.mailgun.org:587`
+      STARTTLS recommended, or `:465` SMTPS; EU domains use
+      `smtp.eu.mailgun.org`). Percent-encode `@ / : ?` in passwords.
+      Set `EMAIL_FROM` (a sender on a domain with SPF/DKIM),
       `EMAIL_REPLY_TO` (a monitored support inbox — unset means replies to a
       no-reply sender bounce) and `APP_URL` (`https://www.copinex.com`, no
       trailing slash). The API **refuses to boot in production without
@@ -30,9 +35,11 @@ going live with real money and real members.
       accepting traffic — test credentials any time with
       `pnpm --filter @copinex/api smtp-verify` (prints host/port only, never
       the password). DNS: SPF include for the sending host plus the DKIM
-      record from the SMTP.com dashboard (exact selector/value are issued
-      per-domain — see LAUNCH_STATUS.md Item 1). Verify by requesting a
-      reset for a real mailbox and confirming delivery + SPF/DKIM pass.
+      record from the provider dashboard (exact selector/value are issued
+      per-domain — see LAUNCH_STATUS.md Item 1). Mailgun note: FROM must
+      belong to a verified domain, and sandbox domains deliver only to
+      authorized recipients. Verify by requesting a reset for a real mailbox
+      and confirming delivery + SPF/DKIM pass.
 - [ ] **Real broker PAMM links** - replace the placeholder broker links in
       the `brokers` table (admin UI or SQL) before members see them.
 - [ ] **Pre-pilot cleanup** - run `infrastructure\cleanup\pre-pilot-cleanup.ps1`

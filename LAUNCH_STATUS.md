@@ -6,7 +6,7 @@ evidence. Secrets never appear in this file.
 
 | # | Item | Status | Evidence / next action |
 |---|---|---|---|
-| 1 | SMTP + SPF/DKIM | Provider SELECTED (SMTP.com); **BLOCKED — needs Henry** (credentials + DNS + live delivery test) | SMTP_URL scheme validation, EMAIL_REPLY_TO, production boot requirement, boot-time SMTP verify, `smtp-verify` script, transport tests — all implemented. Needs: SMTP.com sender credentials + DNS records (see below). |
+| 1 | SMTP + SPF/DKIM | Providers APPROVED (SMTP.com + Mailgun); **BLOCKED — needs Henry** (credentials + DNS + live delivery test) | SMTP_URL scheme validation, EMAIL_REPLY_TO, production boot requirement, boot-time SMTP verify, `smtp-verify` script, transport tests — all implemented. Needs: SMTP.com sender credentials + DNS records (see below). |
 | 2 | Live Pay2Crypto key + micro-charge | Not started | Test rail verified live; awaiting live key + explicit charge approval. |
 | 3 | Rotate published dev passwords | Not started | Superadmin first, then the other three. |
 | 4 | Real broker PAMM links | Not started | Awaiting real URLs from Henry — will not invent. |
@@ -15,7 +15,25 @@ evidence. Secrets never appear in this file.
 | 7 | Phase 2 wipe + rehearsal | Not started | After 1–6. Needs explicit confirmation per step. |
 | 8 | Pen test + load test | Not started | Final gate. No destructive prod tests without approval. |
 
-## Item 1 — detail (2026-10-01, provider selected: SMTP.com)
+## Item 1 — detail (2026-10-01, providers: SMTP.com + Mailgun)
+
+**Approved providers (either works — plain SMTP, zero code changes):**
+- **SMTP.com** relay: `send.smtp.com`, sender login + password, STARTTLS
+  2525 (also 25/2082) / SMTPS 465. Entry 50k/mo at $25.
+- **Mailgun** relay (added 2026-10-02): `smtp.mailgun.org` (US) /
+  `smtp.eu.mailgun.org` (EU, must match the domain's region); PER-DOMAIN
+  credentials, default username `postmaster@<domain>` + auto-generated
+  password (Sending → Domain Settings → SMTP Credentials). Ports 587
+  STARTTLS (recommended), 2525 alt, 465 implicit TLS, AUTH PLAIN/LOGIN.
+  Free 100/day tier (covers dev + pilot), Basic 10k/mo at $15, Foundation
+  50k/mo at $35. Full event webhooks (accepted/delivered/failed/
+  opened/clicked/unsubscribed/complained), EU data residency, ISO/GDPR.
+  Notes: FROM must belong to a verified Mailgun domain; sandbox domains
+  deliver only to authorized recipients.
+- **Bird: evaluated, NOT approved.** API-only (no SMTP relay in current
+  docs) — adopting it would force a transport rewrite to 202-accepted REST
+  semantics for zero benefit at our volume. Revisit only if multichannel
+  (SMS/WhatsApp) becomes a requirement.
 
 **Why SMTP.com over Bird:** the app sends via nodemailer over SMTP_URL, so
 SMTP.com (`send.smtp.com`, sender login/password, STARTTLS 2525 or SMTPS
