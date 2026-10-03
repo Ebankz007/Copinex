@@ -22,6 +22,7 @@ import { clearSessionCookies, setSessionCookies, tokenFromCookies } from '../lib
 import { consumeEmailToken, issueEmailToken } from '../services/email-tokens.js';
 import { createNotification, listNotifications, markAllNotificationsRead, markNotificationRead, unreadCount } from '../services/notifications.js';
 import { sha256 } from '../lib/tokens.js';
+import { logger } from '../config/logger.js';
 
 export const authRouter = Router();
 
@@ -232,8 +233,20 @@ authRouter.post('/forgot-password', async (req, res, next) => {
       .where(eq(schema.users.email, email.toLowerCase()))
       .limit(1);
     // Always succeed (even for unknown emails) — never reveal account existence.
+    // A dead mail path must not change the response either: unknown senders
+    // get {ok:true} with no send attempted, so a 500 here would tell an
+    // attacker the address IS registered. Log loudly instead — ops incident,
+    // not a client error. (The authenticated resend endpoint keeps honest
+    // errors: its caller is logged in, so nothing leaks.)
     if (user) {
-      await issueEmailToken(user.id, user.email, 'RESET_PASSWORD');
+      try {
+        await issueEmailToken(user.id, user.email, 'RESET_PASSWORD');
+      } catch (err) {
+        logger.error(
+          { err: err instanceof Error ? err.message : String(err), userId: user.id },
+          'password-reset email failed to send — token issued, mail dead',
+        );
+      }
     }
     res.json({ ok: true });
   } catch (e) {

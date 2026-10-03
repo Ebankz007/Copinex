@@ -19,17 +19,23 @@ import { loginWithEnrollment } from './helpers.js';
 
 // Capture the raw token out of the dev email transport. Only the hash is
 // persisted, so this is the only way to drive the reset/verify flows.
-const sentMail: { to: string; subject: string; text: string }[] = [];
+const { sentMail, sendEmailMock } = vi.hoisted(() => {
+  const sentMail: { to: string; subject: string; text: string }[] = [];
+  return {
+    sentMail,
+    sendEmailMock: vi.fn(async (msg: { to: string; subject: string; text: string }) => {
+      sentMail.push(msg);
+      return { dev: true, body: msg.text };
+    }),
+  };
+});
 vi.mock('../src/services/email.js', async () => {
   const actual = await vi.importActual<typeof import('../src/services/email.js')>(
     '../src/services/email.js',
   );
   return {
     ...actual,
-    sendEmail: async (msg: { to: string; subject: string; text: string }) => {
-      sentMail.push(msg);
-      return { dev: true, body: msg.text };
-    },
+    sendEmail: sendEmailMock,
   };
 });
 
@@ -194,6 +200,14 @@ describe('password reset revokes sessions', () => {
     expect(known.status).toBe(200);
     expect(unknown.status).toBe(200);
     expect(unknown.body).toEqual(known.body);
+  });
+
+  it('stays {ok:true} when the mail path is dead (found live: sandbox refused an unauthorized recipient)', async () => {
+    await register('maildead@test.dev');
+    sendEmailMock.mockRejectedValueOnce(new Error('Message failed: 421 Domain not allowed to send'));
+    const res = await request(app).post('/api/auth/forgot-password').send({ email: 'maildead@test.dev' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
   });
 });
 
