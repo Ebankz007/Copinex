@@ -27,6 +27,12 @@ evidence. Secrets never appear in this file.
 - Fixed en route: `EMAIL_FROM` must be a bare address (zod `.email()`
   rejects `Name <addr>` — the production template had the display-name
   form and would have failed prod boot; corrected).
+- **Plumbing hardened 2026-10-03:** explicit URL parsing with socket
+  timeouts (dead host fails in seconds), 3-attempt retry on transient
+  failures only (auth/5xx abort immediately with actionable messages),
+  forgot-password stays `{ok:true}` on send failure (anti-enumeration),
+  and the suite is pinned to the dev transport under `NODE_ENV=test` so
+  live dev credentials can never leak into test sends.
 
 **Approved providers (either works — plain SMTP, zero code changes):**
 - **SMTP.com** relay: `send.smtp.com`, sender login + password, STARTTLS

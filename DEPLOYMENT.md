@@ -34,7 +34,11 @@ going live with real money and real members.
       `SMTP_URL`** and verifies the connection (connect + auth) before
       accepting traffic — test credentials any time with
       `pnpm --filter @copinex/api smtp-verify` (prints host/port only, never
-      the password). DNS: SPF include for the sending host plus the DKIM
+      the password). Sending is retried 3x (1s/3s backoff) on transient
+      failures only — auth and 5xx failures abort immediately with a message
+      naming the fix; socket timeouts bound a dead host to seconds. The suite
+      never sends real mail (`NODE_ENV=test` forces the dev transport even
+      with credentials configured). DNS: SPF include for the sending host plus the DKIM
       record from the provider dashboard (exact selector/value are issued
       per-domain — see LAUNCH_STATUS.md Item 1). Mailgun note: FROM must
       belong to a verified domain, and sandbox domains deliver only to
