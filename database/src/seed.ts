@@ -8,10 +8,19 @@
  * Usage: pnpm --filter @copinex/database seed
  * Requires DATABASE_URL (defaults to the local dev DB on :5433).
  */
+import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { INVESTMENT_PACKAGES } from '@copinex/engine';
 import * as schema from './schema.js';
+
+// Workspace-root .env — pnpm --filter runs with CWD at the package dir,
+// so ambient DATABASE_URL would otherwise be missed (see drizzle.config.ts).
+dotenv.config({
+  path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env'),
+});
 
 const pool = new Pool({
   connectionString:
