@@ -11,7 +11,7 @@ evidence. Secrets never appear in this file.
 | 3 | Rotate published dev passwords | Not started | Superadmin first, then the other three. |
 | 4 | Real broker PAMM links | Not started | Awaiting real URLs from Henry — will not invent. |
 | 5 | SYSTEM tasks + boot task | Not started | Needs 15-min elevated session with Henry. |
-| 6 | Deployment pipeline | LIVE 2026-10-04: 2-min poller (`copinex-auto-deploy` cron → `deploy.sh` → `/var/log/copinex-deploy.log`) verified healthy-idle; full push-to-deploy drill next | Repo is public: server pulls need no credentials. |
+| 6 | Deployment pipeline | VERIFIED 2026-10-04: push-to-deploy drill `8aa3ab8` auto-deployed healthy by the 2-min poller (`DEPLOYED ... api + web healthy` in `/var/log/copinex-deploy.log`); public site 200/200/200 | Poller: `copinex-auto-deploy` cron. Native panel /hook proved inert — documented, not used. |
 | 7 | Phase 2 wipe + rehearsal | Not started | After 1–6. Needs explicit confirmation per step. |
 | 8 | Pen test + load test | Not started | Final gate. No destructive prod tests without approval. |
 
