@@ -1,0 +1,106 @@
+#!/bin/sh
+# Copinex auto-deploy — executed on the LIVE server by the aaPanel webhook
+# (GitHub push to main). Triggered remotely; must be fully non-interactive
+# and must fail LOUDLY: any failed step aborts before the next one runs,
+# and a failed health check rolls back to the previous commit.
+#
+# One-time server setup (see DEPLOY-AA-PANEL.md):
+#   1. git clone https://github.com/Ebankz007/Copinex.git (public repo: no
+#      credentials needed) into APP_DIR on the server.
+#   2. Paste THIS script into the aaPanel webhook entry for the site
+#      (or call it from there). Keep secrets OUT of this file.
+#   3. Create the production .env (never committed) + install node/pnpm/pm2.
+#
+# Design notes:
+# - Always deploys origin/main HEAD, whatever branch was pushed (a feature-
+#   branch push triggers a harmless no-op redeploy, never a wrong deploy).
+# - Migrations run automatically (drizzle-kit migrate is additive-only in
+#   this project: 0000-0011 add tables/columns, never drop or alter data).
+# - Rollback = previous commit + rebuild + restart. The DB is NOT rolled
+#   back (migrations are forward-only by design).
+
+set -eu
+
+# ── Configure these for the server ──────────────────────
+APP_DIR="/www/wwwroot/copinex"   # server checkout of the Copinex repo
+BRANCH="main"
+API_HEALTH="http://127.0.0.1:4000/api/health"
+WEB_HEALTH="http://127.0.0.1:3000/api/health"
+# How the two processes are restarted (PM2 names on a standard aaPanel host):
+RESTART_CMD="pm2 restart copinex-api copinex-web"
+START_CMD="pm2 start copinex-api copinex-web"
+# ─────────────────────────────────────────────────────────
+
+log() { echo "[deploy $(date '+%Y-%m-%dT%H:%M:%S')] $1"; }
+fail() { log "FAILED: $1"; exit 1; }
+
+[ -d "$APP_DIR/.git" ] || fail "APP_DIR $APP_DIR is not a git checkout"
+cd "$APP_DIR"
+
+# The webhook runs with a minimal PATH — fail here naming the missing
+# binary, not halfway through a deploy. If these exist interactively but
+# not here, export an absolute PATH above (e.g. /root/.nvm/versions/...).
+for bin in git pnpm curl node pm2; do
+  command -v "$bin" >/dev/null 2>&1 || fail "required binary not on webhook PATH: $bin"
+done
+
+PREV_COMMIT="$(git rev-parse HEAD)"
+log "previous commit: $PREV_COMMIT"
+
+log "fetching origin/$BRANCH…"
+git fetch --prune origin || fail "git fetch failed (network or remote down)"
+
+log "resetting to origin/$BRANCH…"
+git reset --hard "origin/$BRANCH" || fail "git reset failed"
+
+NEW_COMMIT="$(git rev-parse HEAD)"
+if [ "$NEW_COMMIT" = "$PREV_COMMIT" ]; then
+  log "already on $NEW_COMMIT — nothing to deploy, verifying health only"
+else
+  log "deploying $PREV_COMMIT → $NEW_COMMIT"
+fi
+
+rollback() {
+  log "health check FAILED — rolling back to $PREV_COMMIT"
+  git reset --hard "$PREV_COMMIT"
+  pnpm --filter @copinex/api build >/dev/null 2>&1 || true
+  pnpm --filter @copinex/web build >/dev/null 2>&1 || true
+  # shellcheck disable=SC2086
+  $RESTART_CMD >/dev/null 2>&1 || true
+  fail "rolled back to $PREV_COMMIT — inspect the server, then push a fix"
+}
+
+log "installing dependencies…"
+pnpm install --frozen-lockfile || fail "pnpm install failed"
+
+log "running database migrations…"
+pnpm --filter @copinex/database migrate || fail "migrations failed — database untouched by later steps, fix and re-push"
+
+log "building…"
+pnpm --filter @copinex/engine build || fail "engine build failed"
+pnpm --filter @copinex/database build || fail "database build failed"
+pnpm --filter @copinex/api build || fail "api build failed"
+pnpm --filter @copinex/web build || fail "web build failed"
+
+log "restarting services…"
+# shellcheck disable=SC2086
+$RESTART_CMD || $START_CMD || fail "process restart failed"
+
+log "health-checking (up to 60s)…"
+healthy=0
+i=0
+while [ "$i" -lt 12 ]; do
+  sleep 5
+  i=$((i + 1))
+  if curl -sf -m 5 "$API_HEALTH" >/dev/null 2>&1 && curl -sf -m 5 "$WEB_HEALTH" >/dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  log "health attempt $i/12 not ready yet…"
+done
+if [ "$healthy" -ne 1 ]; then
+  rollback
+fi
+
+log "DEPLOYED $NEW_COMMIT — api + web healthy"
+echo "$NEW_COMMIT $(date -u +%FT%TZ)" >> deploy.log
