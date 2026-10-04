@@ -1,8 +1,12 @@
 #!/bin/sh
-# Copinex auto-deploy — executed on the LIVE server by the aaPanel webhook
-# (GitHub push to main). Triggered remotely; must be fully non-interactive
-# and must fail LOUDLY: any failed step aborts before the next one runs,
-# and a failed health check rolls back to the previous commit.
+# Copinex auto-deploy — runs on the LIVE server on a 2-minute poll (aaPanel
+# cron) and, once attached, on the panel webhook (GitHub push to main).
+# Poll-driven because the panel's native hook endpoint proved inert in the
+# 2026-10-04 fire drill (pushes delivered 200 but moved nothing). The script
+# is idempotent: no new commit → health check only, no rebuild.
+# Triggered remotely/unattended; must be fully non-interactive and fail
+# LOUDLY: any failed step aborts before the next one runs, and a failed
+# health check rolls back to the previous commit.
 #
 # One-time server setup (see DEPLOY-AA-PANEL.md):
 #   1. git clone https://github.com/Ebankz007/Copinex.git (public repo: no
@@ -38,6 +42,15 @@ export PATH="/www/server/nodejs/v24.18.0/bin:$PATH"
 log() { echo "[deploy $(date '+%Y-%m-%dT%H:%M:%S')] $1"; }
 fail() { log "FAILED: $1"; exit 1; }
 
+# (Re)start both processes with a FRESH environment. Never `pm2 restart`:
+# it preserves the old env, so a changed .env would silently not apply.
+start_processes() {
+  pm2 delete copinex-api copinex-web >/dev/null 2>&1 || true
+  (cd "$APP_DIR/apps/api" && pm2 start dist/index.js --name copinex-api) || return 1
+  (cd "$APP_DIR/apps/web" && pm2 start node_modules/next/dist/bin/next --name copinex-web -- start -p "$WEB_PORT") || return 1
+  pm2 save >/dev/null 2>&1 || true
+}
+
 [ -d "$APP_DIR/.git" ] || fail "APP_DIR $APP_DIR is not a git checkout"
 cd "$APP_DIR"
 
@@ -59,10 +72,21 @@ git reset --hard "origin/$BRANCH" || fail "git reset failed"
 
 NEW_COMMIT="$(git rev-parse HEAD)"
 if [ "$NEW_COMMIT" = "$PREV_COMMIT" ]; then
-  log "already on $NEW_COMMIT — nothing to deploy, verifying health only"
-else
-  log "deploying $PREV_COMMIT → $NEW_COMMIT"
+  log "already on $NEW_COMMIT — verifying health only, no rebuild"
+  if curl -sf -m 5 "$API_HEALTH" >/dev/null 2>&1 && curl -sf -m 5 "$WEB_HEALTH" >/dev/null 2>&1; then
+    log "HEALTHY on $NEW_COMMIT — nothing to do"
+    exit 0
+  fi
+  log "up to date but UNHEALTHY — restarting processes once"
+  start_processes || fail "restart failed while up to date"
+  sleep 15
+  if curl -sf -m 5 "$API_HEALTH" >/dev/null 2>&1 && curl -sf -m 5 "$WEB_HEALTH" >/dev/null 2>&1; then
+    log "HEALTHY after restart — nothing to do"
+    exit 0
+  fi
+  fail "UNHEALTHY and already on latest — needs a human, not a rebuild"
 fi
+log "deploying $PREV_COMMIT → $NEW_COMMIT"
 
 rollback() {
   log "health check FAILED — rolling back to $PREV_COMMIT"
@@ -71,15 +95,6 @@ rollback() {
   pnpm --filter @copinex/web build >/dev/null 2>&1 || true
   start_processes >/dev/null 2>&1 || true
   fail "rolled back to $PREV_COMMIT — inspect the server, then push a fix"
-}
-
-# (Re)start both processes with a FRESH environment. Never `pm2 restart`:
-# it preserves the old env, so a changed .env would silently not apply.
-start_processes() {
-  pm2 delete copinex-api copinex-web >/dev/null 2>&1 || true
-  (cd "$APP_DIR/apps/api" && pm2 start dist/index.js --name copinex-api) || return 1
-  (cd "$APP_DIR/apps/web" && pm2 start node_modules/next/dist/bin/next --name copinex-web -- start -p "$WEB_PORT") || return 1
-  pm2 save >/dev/null 2>&1 || true
 }
 
 log "installing dependencies…"
