@@ -24,11 +24,15 @@ set -eu
 # ── Configure these for the server ──────────────────────
 APP_DIR="/www/wwwroot/copinex"   # server checkout of the Copinex repo
 BRANCH="main"
-API_HEALTH="http://127.0.0.1:4000/api/health"
-WEB_HEALTH="http://127.0.0.1:3000/api/health"
-# How the two processes are restarted (PM2 names on a standard aaPanel host):
-RESTART_CMD="pm2 restart copinex-api copinex-web"
-START_CMD="pm2 start copinex-api copinex-web"
+API_PORT="4000"
+WEB_PORT="3100"                  # 3000 is taken by another app on this host
+API_HEALTH="http://127.0.0.1:${API_PORT}/api/health"
+WEB_HEALTH="http://127.0.0.1:${WEB_PORT}/api/health"
+# Absolute node/pnpm first: webhook/cron shells carry a minimal PATH.
+export PATH="/www/server/nodejs/v24.18.0/bin:$PATH"
+# How the two processes are (re)started. PM2 keeps the previous environment
+# across `restart`, so a changed .env needs delete+start, not restart:
+# the commands below do exactly that.
 # ─────────────────────────────────────────────────────────
 
 log() { echo "[deploy $(date '+%Y-%m-%dT%H:%M:%S')] $1"; }
@@ -65,9 +69,17 @@ rollback() {
   git reset --hard "$PREV_COMMIT"
   pnpm --filter @copinex/api build >/dev/null 2>&1 || true
   pnpm --filter @copinex/web build >/dev/null 2>&1 || true
-  # shellcheck disable=SC2086
-  $RESTART_CMD >/dev/null 2>&1 || true
+  start_processes >/dev/null 2>&1 || true
   fail "rolled back to $PREV_COMMIT — inspect the server, then push a fix"
+}
+
+# (Re)start both processes with a FRESH environment. Never `pm2 restart`:
+# it preserves the old env, so a changed .env would silently not apply.
+start_processes() {
+  pm2 delete copinex-api copinex-web >/dev/null 2>&1 || true
+  (cd "$APP_DIR/apps/api" && pm2 start dist/index.js --name copinex-api) || return 1
+  (cd "$APP_DIR/apps/web" && pm2 start node_modules/next/dist/bin/next --name copinex-web -- start -p "$WEB_PORT") || return 1
+  pm2 save >/dev/null 2>&1 || true
 }
 
 log "installing dependencies…"
@@ -82,9 +94,8 @@ pnpm --filter @copinex/database build || fail "database build failed"
 pnpm --filter @copinex/api build || fail "api build failed"
 pnpm --filter @copinex/web build || fail "web build failed"
 
-log "restarting services…"
-# shellcheck disable=SC2086
-$RESTART_CMD || $START_CMD || fail "process restart failed"
+log "restarting services (fresh env)…"
+start_processes || fail "process start failed"
 
 log "health-checking (up to 60s)…"
 healthy=0

@@ -41,14 +41,17 @@ pnpm --filter @copinex/database migrate
 # Seed ONLY the permission catalog + your own admin account. NEVER run the
 # dev seed-users here: its passwords are published in git history.
 
-# 5. Register the processes (names must match deploy.sh RESTART_CMD)
+# 5. Register the processes (names must match deploy.sh; web on 3100 —
+#    port 3000 belongs to another app on this host — never `pm2 restart`
+#    after an env change, it preserves the stale environment: delete + start)
+pm2 delete copinex-api copinex-web 2>/dev/null; true
 pm2 start apps/api/dist/index.js --name copinex-api   # after pnpm build (step 6)
-pm2 start "node_modules/.bin/next start -p 3000" --name copinex-web
+(cd apps/web && pm2 start node_modules/next/dist/bin/next --name copinex-web -- start -p 3100)
 pm2 save && pm2 startup   # resurrect on reboot
 
 # 6. First deploy by hand (proves the script before automation does)
 bash infrastructure/deploy/deploy.sh
-curl -sf http://127.0.0.1:4000/api/health && curl -sf http://127.0.0.1:3000/api/health
+curl -sf http://127.0.0.1:4000/api/health && curl -sf http://127.0.0.1:3100/api/health
 ```
 
 ## Attach the script to the webhook (aaPanel panel)
