@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError, resetPassword } from "@/lib/api";
+import { PasswordInput } from "@/components/password-input";
 
 export function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter();
@@ -50,32 +51,24 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
   return (
     <form onSubmit={onSubmit} className="auth-stack">
-      <div className="auth-field">
-        <label htmlFor="password">New password</label>
-        <input
-          id="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
-        />
-      </div>
-      <div className="auth-field">
-        <label htmlFor="confirm">Confirm password</label>
-        <input
-          id="confirm"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          placeholder="Repeat the password"
-        />
-      </div>
+      <PasswordInput
+        id="password"
+        label="New password"
+        value={password}
+        onChange={setPassword}
+        placeholder="At least 8 characters"
+        autoComplete="new-password"
+        minLength={8}
+      />
+      <PasswordInput
+        id="confirm"
+        label="Confirm password"
+        value={confirm}
+        onChange={setConfirm}
+        placeholder="Repeat the password"
+        autoComplete="new-password"
+        minLength={8}
+      />
       {error && <p className="auth-error">{error}</p>}
       <button type="submit" disabled={busy} className="auth-submit">
         {busy ? "Please wait…" : "Reset password"}

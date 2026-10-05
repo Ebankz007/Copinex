@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ApiError, login, register, setPendingEnrollChallenge, verifyTwoFactor } from "@/lib/api";
+import { PasswordInput } from "@/components/password-input";
 
 type Mode = "login" | "register";
 
@@ -171,29 +172,27 @@ export function AuthForm({
         />
       </div>
 
-      <div className="auth-field">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <label htmlFor="password">Password</label>
-          {isLogin && (
-            <Link
-              href="/forgot-password"
-              style={{ fontSize: 12, fontWeight: 800, color: "var(--blue-600)" }}
-            >
-              Forgot password?
-            </Link>
-          )}
-        </div>
-        <input
-          id="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete={isLogin ? "current-password" : "new-password"}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
-        />
-      </div>
+      <PasswordInput
+        id="password"
+        label={
+          <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span>Password</span>
+            {isLogin && (
+              <Link
+                href="/forgot-password"
+                style={{ fontSize: 12, fontWeight: 800, color: "var(--blue-600)" }}
+              >
+                Forgot password?
+              </Link>
+            )}
+          </span>
+        }
+        value={password}
+        onChange={setPassword}
+        placeholder="At least 8 characters"
+        autoComplete={isLogin ? "current-password" : "new-password"}
+        minLength={8}
+      />
 
       {!isLogin && (
         <div className="auth-field">

@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeftIcon } from "@/components/icons";
+import { ChevronLeftIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
 
 /**
  * Dark portal page frame — matches the existing member pages (back link, page
@@ -115,7 +116,7 @@ export function ActionButton({
   );
 }
 
-/** Labelled input row. */
+/** Labelled input row. Password fields get a show/hide eye toggle. */
 export function Field({
   label,
   value,
@@ -131,19 +132,36 @@ export function Field({
   placeholder?: string;
   autoComplete?: string;
 }) {
+  const [visible, setVisible] = useState(false);
+  const isPassword = type === "password";
+  const Icon = visible ? EyeOffIcon : EyeIcon;
   return (
     <label className="block">
       <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-mist">
         {label}
       </span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-night-2 px-4 py-3 text-[15px] text-soft outline-none transition focus:border-green/50"
-      />
+      <span className="relative block">
+        <input
+          type={isPassword && visible ? "text" : type}
+          value={value}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-2xl border border-white/10 bg-night-2 px-4 py-3 text-[15px] text-soft outline-none transition focus:border-green/50"
+          style={isPassword ? { paddingRight: 44 } : undefined}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            aria-label={visible ? "Hide password" : "Show password"}
+            aria-pressed={visible}
+            className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center text-mist transition hover:text-soft"
+          >
+            <Icon className="h-[19px] w-[19px]" />
+          </button>
+        )}
+      </span>
     </label>
   );
 }
